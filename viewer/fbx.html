@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Health.Lab Model – Visualize FBX</title><link rel="stylesheet" href="style.css?v=108">
+<title>Health.Lab Model – Visualize FBX</title><link rel="stylesheet" href="style.css?v=1081">
 <script type="importmap">{"imports": {"three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
   "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 <style>
@@ -55,8 +55,8 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { loadRig, makeCameras, makeMat, addLights, toggle, roomAt, ROOM_NAME } from "./rig.js?v=108";
-const VER = "108";
+import { loadRig, makeCameras, makeMat, addLights, toggle, roomAt, ROOM_NAME } from "./rig.js?v=1081";
+const VER = "1081";
 const $ = id => document.getElementById(id), msg = $("msg"), bar = $("bar");
 const Q = new URLSearchParams(location.search); const POS = Q.get("table") === "2" ? "_table2" : "";
 const renderer = new THREE.WebGLRenderer({ antialias: true });

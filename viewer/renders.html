@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Health.Lab Model – renders</title><link rel="stylesheet" href="style.css?v=108">
+<title>Health.Lab Model – renders</title><link rel="stylesheet" href="style.css?v=1081">
 <style>
   main { max-width: 1400px; margin: 0 auto; padding: 72px 16px 32px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
@@ -24,8 +24,8 @@ const R = [["living_room_windows", "Living room"], ["living_room_corner", "Livin
 const g = document.getElementById("g"), lb = document.getElementById("lb");
 for (const [f, t] of R) {
   const fig = document.createElement("figure");
-  fig.innerHTML = `<img src="renders/${f}_m.jpg?v=108" alt="${t}" loading="lazy"><figcaption>${t}</figcaption>`;
-  fig.onclick = () => { lb.querySelector("img").src = `renders/${f}.jpg?v=108`; lb.style.display = "grid"; };
+  fig.innerHTML = `<img src="renders/${f}_m.jpg?v=1081" alt="${t}" loading="lazy"><figcaption>${t}</figcaption>`;
+  fig.onclick = () => { lb.querySelector("img").src = `renders/${f}.jpg?v=1081`; lb.style.display = "grid"; };
   g.appendChild(fig);
 }
 lb.onclick = () => lb.style.display = "none";

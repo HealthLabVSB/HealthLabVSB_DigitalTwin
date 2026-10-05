@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Health.Lab Model – splat</title><link rel="stylesheet" href="style.css?v=108">
+<title>Health.Lab Model – splat</title><link rel="stylesheet" href="style.css?v=1081">
 <script type="importmap">{"imports": {"three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
   "@mkkellogg/gaussian-splats-3d": "https://cdn.jsdelivr.net/npm/@mkkellogg/gaussian-splats-3d@0.4.7/build/gaussian-splats-3d.module.js"}}</script>
 </head>
@@ -15,7 +15,7 @@
 <script type="module">
 import * as THREE from "three";
 import * as GS from "@mkkellogg/gaussian-splats-3d";
-const VER = "108";
+const VER = "1081";
 // hybrid = gaussians sampled from the clean model (sharp, complete); original = the captured 3D Gaussian Splatting reconstruction
 const Q = new URLSearchParams(location.search); const which = Q.get("s") || "hybrid";
 const ORIG = which === "original", POS = Q.get("table") === "2" && !ORIG ? "_table2" : "";

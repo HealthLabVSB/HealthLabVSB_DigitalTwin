@@ -81,7 +81,8 @@ Then open <http://localhost:8766/>. Any static web server works. The viewer load
 | `renders/` | Final renders, 2560 × 1440, Cycles, 288 samples (15 views), the floor plan in metres (`floor_plan_metres.png`) and a registration check (`check_captury_c3d_in_flat.png`). |
 | `viewer/` | Browser viewer: Model, Hybrid splat, Gaussian splat, Visualize FBX, Renders. |
 | `transforms/frames.json` | All 4 × 4 matrices between the model frame, the mocap frames and the splat frame (Python, Blender, three.js). |
-| `viewer/rig.json` | The 30 rig cameras of both calibrations, the rig → model matrices, the mat and the room polygons. |
+| `viewer/rig.json` | The 30 rig cameras of both calibrations, the rig → model matrices, the mat and the room polygons. Cameras are shown at `p` (snapped to the model walls) and keep their calibrated position in `p_calib`. |
+| `TODO.md` | Open work, mainly **more precise alignment of the cameras with the flat**. |
 | `scripts/` | The pipeline that produced everything (Python + Blender), as used. |
 | `splat/` | Hybrid splats and the original Gaussian splat (PLY, INRIA 3DGS format). **Not in git** (see below). Only `hybrid_splat_preview.png` is committed. |
 | `docs/images/` | Images for this README. |
@@ -226,7 +227,7 @@ group.matrixAutoUpdate = false; group.matrix.copy(M); group.add(fbx);
 
 | Tab | What it does |
 |---|---|
-| **Model** | Walk through the baked model. Drag = look around, W A S D / arrows = walk, Q / E = down / up. Preset viewpoints, ceiling on/off, table position 1/2. Checkboxes **Cameras** (the 30 rig cameras with view frusta and numbers, coloured by room) and **Mat 2 × 2 m** (a blue 10 cm mat by the pillar, where the Dataset_klekz takes were recorded). |
+| **Model** | Walk through the baked model. Drag = look around, W A S D / arrows = walk, Q / E = down / up. Preset viewpoints, ceiling on/off, table position 1/2. Checkboxes **Cameras** (the 30 rig cameras with view frusta and numbers, coloured by room, snapped to the model walls – see TODO.md) and **Mat 2 × 2 m** (a blue 10 cm mat by the pillar, where the Dataset_klekz takes were recorded). |
 | **Hybrid splat** | The hybrid splat, with or without ceiling, table position 1/2. |
 | **Gaussian splat** | The original Gaussian splat as captured, in the same frame and with the same viewpoints. |
 | **Visualize FBX** | Plays FBX recordings inside the flat, see below. |
@@ -289,7 +290,7 @@ group.matrixAutoUpdate = false; group.matrix.copy(M); group.add(fbx);
 
 **Collections** (hidden by default; switch the eye icon on):
 
-- `wishcap_cameras`: 30 real Blender cameras at the calibrated poses, with focal length from `camera-2026-02.calib`. Select one and press Ctrl + Numpad 0 to look through it.
+- `wishcap_cameras`: 30 real Blender cameras with orientation and focal length from `camera-2026-02.calib`, placed 8 cm in front of the model walls. The calibrated centre is in the custom property `calibrated_position`; see [TODO.md](TODO.md). Select one and press Ctrl + Numpad 0 to look through it.
 - `mat_2x2m`: the blue 2 × 2 × 0.10 m mat. It is also excluded from rendering by default.
 
 `render_camera` is the camera used for the final renders. Cycles at 288 samples takes about 4 minutes per 2560 × 1440 view on an Apple-silicon Mac.
@@ -311,7 +312,7 @@ group.matrixAutoUpdate = false; group.matrix.copy(M); group.add(fbx);
 **Known issues:**
 
 1. A WishCap panel take from 2026-09-12, mapped with `camera-2026-02.calib`, sits in the bedroom but 10–22 cm below the floor. The take or the panel probably used a different calibration file. Check the md5 of the calibration on the capture host.
-2. Rig camera 3 (bedroom) comes out about 19 cm behind the bedroom's north wall. The other cameras sit on walls and in corners.
+2. **Cameras vs. walls.** A few model walls and the pillar are 15–30 cm off: the living room south wall, the bathroom east wall, possibly the entrance hall south wall, and the pillar. As a result, some calibrated cameras came out behind a wall. For now the cameras are shown snapped in front of the model walls. Cameras 15 and 23 are placed next to the pillar as in a photo of it. The real fix (moving those walls, release 1.0.9) and all the evidence are in [TODO.md](TODO.md) under *More precise alignment of the cameras with the flat*. Mocap registration is not affected.
 3. The shot_003 ↔ 2026-02 transform carries a 1.1° tilt, because it is fitted on camera centres only. It is exact in the living room and may be off by a few cm far from it.
 4. Small objects (decoration, cables, clutter) are modelled only where they matter for the look. The original splat shows the real state.
 

@@ -1,4 +1,4 @@
-"""rig.json for the viewer: the 30 WishCap cameras of both calibrations (rig metres, OpenCV extrinsics) and the 4x4 matrices taking
+"""rig.json for the viewer: the 30 WishCap cameras (shown snapped in front of the model walls, see TODO.md) of both calibrations (rig metres, OpenCV extrinsics) and the 4x4 matrices taking
 each rig frame into the web model frame (x = a_m, y = h_m, z = -b_m). Used by model.html (camera toggle) and fbx.html."""
 import json, re, math, numpy as np
 import sys
@@ -35,6 +35,43 @@ for c in C26:
     model.append(dict(i=c["i"], room=rooms[str(c["i"])], p=np.round(p[:3], 4).tolist(),
                       f=np.round(W26[:3, :3] @ R[2] / k, 5).tolist(), r=np.round(W26[:3, :3] @ R[0] / k, 5).tolist(),
                       d=np.round(W26[:3, :3] @ R[1] / k, 5).tolist(), fov=c["fov"]))
+# Interim fix, see TODO.md "More precise alignment of the cameras with the flat": a few model walls sit 15-30 cm inside
+# the real ones, so some calibrated cameras end up behind a wall. For display, each camera is pushed into the room it
+# looks at until it hangs INSET in front of every nearby wall. The calibrated centre stays in p_calib (and in "calib",
+# which the FBX registration uses).
+INSET, NEAR = 0.08, 0.45
+POLYS = {n: np.array(p, float) * S for n, p in json.load(open("lights.json"))["rooms"].items()}     # (a, b) metres
+def inside(pt, P):
+    c = False
+    for i in range(len(P)):
+        (x1, y1), (x2, y2) = P[i], P[i - 1]
+        if (y1 > pt[1]) != (y2 > pt[1]) and pt[0] < (x2 - x1) * (pt[1] - y1) / (y2 - y1) + x1: c = not c
+    return c
+def snap(q, f):
+    room = next((P for P in POLYS.values() if inside(q + 0.6 * f, P)), None)          # the room the camera looks into
+    if room is None: return q
+    for _ in range(3):
+        for i in range(len(room)):
+            A_, B_ = room[i - 1], room[i]; L_ = np.linalg.norm(B_ - A_); u = (B_ - A_) / L_
+            n = np.array([-u[1], u[0]])
+            if not inside((A_ + B_) / 2 + 0.01 * n, room): n = -n                     # inward normal
+            t, s_ = (q - A_) @ u, (q - A_) @ n
+            if -0.3 < t < L_ + 0.3 and -NEAR < s_ < INSET: q = q + (INSET - s_) * n
+    return q
+for m in model:
+    p = np.array(m["p"]); ab = np.array([p[0], -p[2]]); f = np.array([m["f"][0], -m["f"][2]]); f /= np.linalg.norm(f)
+    q = snap(ab.copy(), f)
+    m["p_calib"] = m["p"]; m["p"] = [round(q[0], 4), m["p"][1], round(-q[1], 4)]
+    m["moved_cm"] = round(float(np.linalg.norm(q - ab)) * 100, 1)
+# Cameras 15 and 23 hang from the ceiling on either side of the pillar. A photo of the pillar (Dan, 2026-10-05) and the
+# rig frames put the real pillar ~16 cm further east than the model has it; until the pillar moves (TODO.md), the two
+# cameras move 16 cm west so that they sit next to the model pillar as in the photo (15: ~0.29 m west of it, 23: ~0.07 m east).
+PILLAR_FIX = {15: -0.16, 23: -0.16}
+for m in model:
+    if m["i"] in PILLAR_FIX:
+        m["p"][0] = round(m["p"][0] + PILLAR_FIX[m["i"]], 4)
+        m["moved_cm"] = round(float(np.hypot(m["p"][0] - m["p_calib"][0], m["p"][2] - m["p_calib"][2])) * 100, 1)
+print("moved cameras:", {m["i"]: m["moved_cm"] for m in model if m["moved_cm"] > 0.05})
 mat_a, mat_b = (0.42 - 1.0 / S, 0.42 + 1.0 / S), (-0.04 - 2.0 / S, -0.04)  # units; pillar a -0.05..0.30, b 0..0.50
 L = json.load(open("lights.json"))["rooms"]                          # room polygons (units) -> web x, z metres
 POLY_EN = {"obyvak_kuchyn_chodba": "living_kitchen_hall", "loznice": "bedroom", "koupelna": "bathroom", "predsin": "entrance_hall"}
