@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Health.Lab Model – Visualize FBX</title><link rel="stylesheet" href="style.css?v=108">
+<script type="importmap">{"imports": {"three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+<style>
+  .side { position: fixed; left: 12px; top: 60px; z-index: 10; width: 330px; max-width: calc(100vw - 24px); background: var(--panel);
+          border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+  .side select, .side button { font: inherit; width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+  .side .row { display: flex; gap: 6px; margin-top: 6px; } .side .row > * { flex: 1; }
+  .side dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 10px 0 0; } .side dt { color: var(--muted); } .side dd { margin: 0; }
+  .side .reg { margin-top: 8px; padding: 6px 8px; border-radius: 6px; background: var(--bg); color: var(--muted); }
+  .side .reg b { color: var(--ink); } .side .warn { color: #c2410c; }
+  .side .opts { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; position: static; }
+  .side .opts label.chk, .side .opts button { font-size: 12px; padding: 4px 9px; width: auto; }
+  .player { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 10; display: flex; gap: 8px; align-items: center;
+            background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; }
+  .player button { font: inherit; border: 0; background: none; color: var(--ink); cursor: pointer; padding: 4px 6px; border-radius: 6px; min-width: 32px; }
+  .player button:hover { color: var(--accent); } .player #play { font-size: 18px; }
+  .player input[type=range] { flex: 1; accent-color: var(--accent); min-width: 80px; }
+  .player #time { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--muted); font-size: 13px; }
+  .player select { font: inherit; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); padding: 2px 4px; }
+  #drop { position: fixed; inset: 0; z-index: 30; display: none; place-items: center; background: #b5763c55; color: #fff; font-size: 28px; pointer-events: none; }
+  @media (max-width: 900px) { .help { display: none; } }
+  @media (max-width: 700px) { .side { top: 96px; width: auto; right: 12px; } .side dl { display: none; } }
+</style>
+</head>
+<body>
+<header><b>Health.Lab Model</b><a id="nav-index" href="index.html">Overview</a><a id="nav-model" href="model.html">Model</a><a id="nav-hybrid" href="splat.html">Hybrid splat</a><a id="nav-gaussian" href="splat.html?s=original">Gaussian splat</a><a class="on" id="nav-fbx" href="fbx.html">Visualize FBX</a><a id="nav-renders" href="renders.html">Renders</a></header>
+<div id="view"></div><div id="msg"><span>Loading the flat…</span></div><div id="drop">Drop the FBX here</div><div class="ver">ver 1.0.8 Beta</div>
+<div class="side">
+  <select id="list"></select>
+  <div class="row"><button id="open">Open your own FBX…</button><select id="frame" title="Coordinate frame for an FBX without cameras">
+    <option value="2026-02">frame 2026-02 (WishCap panel)</option><option value="shot_003">frame shot_003 (Captury)</option></select></div>
+  <input type="file" id="file" accept=".fbx" hidden>
+  <div class="reg" id="reg">–</div>
+  <dl>
+    <dt>Time</dt><dd id="i-time">–</dd>
+    <dt>Room</dt><dd id="i-room">–</dd>
+    <dt>Hips</dt><dd id="i-hips">–</dd>
+    <dt>Lowest joint</dt><dd id="i-low">–</dd>
+  </dl>
+  <div class="bar opts" id="bar"></div>
+</div>
+<div class="help">Left button = orbit · right = pan · wheel = zoom · space = play/pause · ← → = one frame (with Shift one second) · drop your own FBX into the window</div>
+<div class="player">
+  <button id="first" title="To the start">⏮</button><button id="prev" title="One frame back">◀︎|</button>
+  <button id="play" title="Play / pause">▶︎</button><button id="next" title="One frame forward">|▶︎</button>
+  <input type="range" id="seek" min="0" max="1" step="0.02" value="0">
+  <span id="time">0:00.00 / 0:00.00</span>
+  <select id="speed" title="Speed"><option>0.1</option><option>0.25</option><option>0.5</option><option selected>1</option><option>2</option><option>4</option></select>
+</div>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { loadRig, makeCameras, makeMat, addLights, toggle, roomAt, ROOM_NAME } from "./rig.js?v=108";
+const VER = "108";
+const $ = id => document.getElementById(id), msg = $("msg"), bar = $("bar");
+const Q = new URLSearchParams(location.search); const POS = Q.get("table") === "2" ? "_table2" : "";
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace; $("view").appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0xdfe6ee); addLights(scene);
+const cam = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.03, 200); cam.position.set(3, 4, 6);
+const ctl = new OrbitControls(cam, renderer.domElement); ctl.enableDamping = true; ctl.target.set(0, 0.9, 1);
+addEventListener("resize", () => { cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+
+// ---------------------------------------------------------------- the flat (web model frame, the same as on the Model page)
+const rig = await loadRig(VER);
+const gl = new GLTFLoader(), flat = {}; let ceiling = Q.get("ceiling") === "1";
+function showFlat() { for (const k in flat) flat[k].visible = (k === "strop") === ceiling; }
+function loadFlat(k, url) { return gl.loadAsync(url).then(g => { flat[k] = g.scene; scene.add(g.scene); showFlat(); }); }
+await loadFlat("bez", "flat" + POS + "_no_ceiling.glb?v=" + VER); msg.textContent = "";
+const kam = makeCameras(rig), mat = makeMat(rig); scene.add(kam, mat);
+function flag(k, v) { const u = new URL(location.href); v ? u.searchParams.set(k, "1") : u.searchParams.delete(k); history.replaceState(null, "", u); }
+toggle(bar, "Ceiling", ceiling, v => { ceiling = v; flag("ceiling", v); if (v && !flat.strop) loadFlat("strop", "flat" + POS + ".glb?v=" + VER); showFlat(); });
+toggle(bar, "Cameras", Q.get("cameras") === "1", v => { kam.visible = v; flag("cameras", v); });
+toggle(bar, "Mat 2 × 2 m", Q.get("mat") === "1", v => { mat.visible = v; flag("mat", v); });
+let take = null, playing = false, t = 0, follow = true, trailOn = true, lastHips = null;
+toggle(bar, "Follow the subject", true, v => follow = v);
+const showMesh = toggle(bar, "Body surface", true, v => { if (take?.skin) take.skin.forEach(m => m.visible = v); });
+toggle(bar, "Trail", true, v => { if (take) take.trail.visible = v; trailOn = v; });
+const sb = document.createElement("button"); sb.textContent = POS ? "Table: position 2 → 1" : "Table: position 1 → 2";
+sb.onclick = () => { const u = new URL(location.href); u.searchParams.set("table", POS ? "1" : "2"); location.href = u.toString(); }; bar.appendChild(sb);
+for (const [t, off] of [["Top", [0.01, 5.5, 0.01]], ["Oblique", [-0.6, 3.4, 3.0]], ["Side", [2.2, 0.7, 0]], ["Front", [0, 0.7, 2.2]]]) {
+  const b = document.createElement("button"); b.textContent = t; b.onclick = () => cam.position.copy(ctl.target).add(new THREE.Vector3(...off)); bar.appendChild(b);
+}
+
+// ---------------------------------------------------------------- registration
+// Captury FBX carries its cameras (named by MAC): try every axis permutation / sign / unit against both calibrations and
+// keep the best fit, so the take lands where it was recorded. WishCap FBX has no cameras: rig (x, y, z), units by size.
+const PERMS = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]];
+function fitCameras(raw) {
+  let best = null;
+  for (const [cal, cams] of Object.entries(rig.calib)) {
+    const byMac = new Map(cams.map(c => [c.mac.replace(/:/g, "").toLowerCase(), c.o]));
+    const pairs = raw.filter(r => byMac.has(r.mac)).map(r => [r.p, byMac.get(r.mac)]);
+    if (pairs.length < 3) continue;
+    for (const pm of PERMS) for (let sg = 0; sg < 8; sg++) for (const sc of [1, 0.01, 0.001]) {
+      const s = [sg & 1 ? -sc : sc, sg & 2 ? -sc : sc, sg & 4 ? -sc : sc];
+      const map = p => [0, 1, 2].map(i => s[i] * p[pm[i]]);
+      const t = [0, 0, 0]; for (const [p, o] of pairs) { const q = map(p); for (let i = 0; i < 3; i++) t[i] += (o[i] - q[i]) / pairs.length; }
+      let e = 0; for (const [p, o] of pairs) { const q = map(p); for (let i = 0; i < 3; i++) e += (o[i] - q[i] - t[i]) ** 2; }
+      e = Math.sqrt(e / pairs.length);
+      if (!best || e < best.rms) best = { cal, pm, s, t, rms: e, n: pairs.length };
+    }
+  }
+  return best;
+}
+function rawToRig(pm, s, t) {                      // 4x4: raw FBX coordinates -> rig metres
+  const m = new THREE.Matrix4(), e = Array(16).fill(0);  // row-major for Matrix4.set
+  for (let i = 0; i < 3; i++) { e[i * 4 + pm[i]] = s[i]; e[i * 4 + 3] = t[i]; } e[15] = 1;
+  return m.set(...e);
+}
+const toModel = cal => new THREE.Matrix4().set(...rig.to_model[cal].flat());
+
+// ---------------------------------------------------------------- the take
+const fbx = new FBXLoader();
+const BONE = new THREE.MeshStandardMaterial({ color: 0xe0782d, roughness: 0.5 }), JOINT = new THREE.MeshStandardMaterial({ color: 0x7c2d12, roughness: 0.5 });
+const SKIN = new THREE.MeshStandardMaterial({ color: 0x8fa6c4, roughness: 0.7, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false });
+function dispose() {
+  if (!take) return; take.mixer.stopAllAction(); scene.remove(take.root, take.figure, take.trail);
+  take.root.traverse(o => { o.geometry?.dispose?.(); }); take = null;
+}
+async function open(url, name, frameHint) {
+  dispose(); playing = false; $("play").textContent = "▶︎"; msg.innerHTML = `<span>Loading ${name}…</span>`;
+  let g; try { g = await fbx.loadAsync(url); } catch (e) { msg.innerHTML = `<span>Could not load ${name}: ${e.message ?? e}. Put the file into viewer/fbx/ (see README) or open your own FBX.</span>`; return; }
+  const clip = g.animations.reduce((a, b) => (b.duration > (a?.duration ?? -1) ? b : a), null);
+  const mixer = new THREE.AnimationMixer(g); if (clip) mixer.clipAction(clip).play();
+  const bones = []; g.traverse(o => { if (o.isBone) bones.push(o); });
+  if (!bones.length) { msg.innerHTML = `<span>${name}: no skeleton in the file</span>`; return; }
+  mixer.setTime(Math.min(1, (clip?.duration ?? 0) / 2)); g.updateMatrixWorld(true);
+  const raw = []; g.traverse(o => { if (o.isCamera && /^[0-9a-f]{12}$/i.test(o.name)) raw.push({ mac: o.name.toLowerCase(), p: o.getWorldPosition(new THREE.Vector3()).toArray() }); });
+  const fit = raw.length >= 3 ? fitCameras(raw) : null;
+  let M, reg;
+  if (fit && fit.rms < 0.3) {
+    M = toModel(fit.cal).multiply(rawToRig(fit.pm, fit.s, fit.t)); $("frame").value = fit.cal; $("frame").disabled = true;
+    reg = `<b>Registered by the ${fit.n} cameras in the FBX</b><br>calibration ${fit.cal === "shot_003" ? "shot_003 (Captury)" : "2026-02 (WishCap panel)"}, camera error ${(fit.rms * 1000).toFixed(1)} mm`;
+  } else {
+    const cal = frameHint ?? $("frame").value; $("frame").value = cal; $("frame").disabled = false;
+    const box = new THREE.Box3(); bones.forEach(b => box.expandByPoint(b.getWorldPosition(new THREE.Vector3())));
+    const span = box.max.y - box.min.y, sc = span > 300 ? 0.001 : span > 3 ? 0.01 : 1;
+    M = toModel(cal).multiply(new THREE.Matrix4().makeScale(sc, sc, sc));
+    reg = `<b>FBX without cameras</b> – read as rig (x, y, z), units ${sc === 0.001 ? "mm" : sc === 0.01 ? "cm" : "m"}, frame ${cal}`
+        + (fit ? `<br><span class="warn">the cameras in the FBX match no calibration (error ${(fit.rms * 1000).toFixed(0)} mm)</span>` : "");
+  }
+  const root = new THREE.Group(); root.matrixAutoUpdate = false; root.matrix.copy(M); root.add(g); scene.add(root);
+  const skin = []; g.traverse(o => { if (o.isSkinnedMesh) { o.material = SKIN; o.frustumCulled = false; o.visible = showMesh.checked; skin.push(o); } else if (o.isMesh) o.visible = false; });
+  // the figure: a cylinder per bone and a ball per joint, refreshed every frame from the bones' world positions
+  const links = bones.filter(b => b.parent?.isBone).map(b => [b.parent, b]);
+  const figure = new THREE.Group();
+  const cyl = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.022, 0.022, 1, 10), BONE, links.length);
+  const ball = new THREE.InstancedMesh(new THREE.SphereGeometry(0.035, 14, 10), JOINT, bones.length);
+  cyl.frustumCulled = ball.frustumCulled = false; figure.add(cyl, ball); scene.add(figure);
+  const dur = clip?.duration ?? 0, tr = clip?.tracks[0]?.times ?? [0, 1];
+  const dts = []; for (let i = 1; i < tr.length; i++) dts.push(tr[i] - tr[i - 1]); dts.sort((a, b) => a - b);
+  const fps = dts.length ? Math.round(1 / dts[dts.length >> 1]) : 30;
+  // the hips' path over the whole take, drawn just above the floor
+  const hipsBone = bones.find(b => /hips/i.test(b.name)) ?? bones[0], pts = [], v = new THREE.Vector3();
+  // Captury takes open with a frame or two of the rest pose at the origin: start after the last jump in the first keys
+  let t0 = 0; const kt = clip?.tracks.find(x => x.name.endsWith(".position"))?.times ?? [];
+  const hipsAt = s => { mixer.setTime(s); root.updateMatrixWorld(true); return hipsBone.getWorldPosition(new THREE.Vector3()); };
+  for (let i = 0; i < Math.min(10, kt.length - 1); i++) if (hipsAt(kt[i]).distanceTo(hipsAt(kt[i + 1])) > 0.5) t0 = kt[i + 1];
+  if (t0) reg += `<br>opening rest pose at the origin (until ${t0.toFixed(2)} s) skipped`;
+  for (let s = t0; s <= dur; s += Math.max(0.05, dur / 1500)) { mixer.setTime(s); root.updateMatrixWorld(true); hipsBone.getWorldPosition(v); pts.push(new THREE.Vector3(v.x, 0.012, v.z)); }
+  const trail = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xb5763c }));
+  trail.visible = trailOn; scene.add(trail);
+  take = { root, g, mixer, bones, links, cyl, ball, figure, skin, trail, dur, fps, hipsBone, name, t0 };
+  $("seek").min = t0; $("seek").max = dur; $("seek").step = 1 / fps; $("reg").innerHTML = reg; msg.textContent = "";
+  lastHips = null; setTime(t0); hipsBone.getWorldPosition(v);
+  ctl.target.copy(v); cam.position.copy(v).add(new THREE.Vector3(-0.6, 3.4, 3.0));
+  playing = dur > 0; $("play").textContent = playing ? "❚❚" : "▶︎";
+}
+const m4 = new THREE.Matrix4(), qa = new THREE.Quaternion(), UP = new THREE.Vector3(0, 1, 0), pa = new THREE.Vector3(), pb = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
+function fmt(s) { const m = Math.floor(s / 60); return `${m}:${(s - 60 * m).toFixed(2).padStart(5, "0")}`; }
+function setTime(s) {
+  if (!take) return; t = Math.max(take.t0, Math.min(take.dur, s));
+  take.mixer.setTime(t); take.root.updateMatrixWorld(true);
+  let low = Infinity;
+  take.bones.forEach((b, i) => { b.getWorldPosition(pa); low = Math.min(low, pa.y); take.ball.setMatrixAt(i, m4.makeTranslation(pa.x, pa.y, pa.z)); });
+  take.links.forEach(([a, b], i) => {
+    a.getWorldPosition(pa); b.getWorldPosition(pb); const d = pb.clone().sub(pa), L = d.length();
+    qa.setFromUnitVectors(UP, L > 1e-6 ? d.divideScalar(L) : UP);
+    take.cyl.setMatrixAt(i, m4.compose(pa.clone().add(pb).multiplyScalar(0.5), qa, new THREE.Vector3(1, Math.max(L, 1e-4), 1)));
+  });
+  take.ball.instanceMatrix.needsUpdate = take.cyl.instanceMatrix.needsUpdate = true;
+  const h = take.hipsBone.getWorldPosition(new THREE.Vector3());
+  if (follow && lastHips) { const dlt = h.clone().sub(lastHips); dlt.y = 0; ctl.target.add(dlt); cam.position.add(dlt); }
+  lastHips = h;
+  $("seek").value = t; const fr = Math.round(t * take.fps);
+  $("time").textContent = `${fmt(t)} / ${fmt(take.dur)}`;
+  $("i-time").textContent = `${t.toFixed(2)} s · frame ${fr} / ${Math.round(take.dur * take.fps)} (${take.fps} fps)`;
+  const r = roomAt(rig, h.x, h.z); $("i-room").innerHTML = r ? ROOM_NAME[r] : `<span class="warn">outside the flat</span>`;
+  $("i-hips").textContent = `a ${h.x.toFixed(2)} m, b ${(-h.z).toFixed(2)} m, height ${h.y.toFixed(2)} m`;
+  $("i-low").innerHTML = Math.abs(low) < 0.06 ? `on the floor (${(low * 100).toFixed(1)} cm)` : `<span class="warn">${Math.abs(low * 100).toFixed(1)} cm ${low < 0 ? "below" : "above"} the floor</span>`;
+}
+
+// ---------------------------------------------------------------- UI
+const list = await (await fetch("fbx/index.json?v=" + VER)).json(), groups = {};
+for (const it of list) {
+  const og = groups[it.group] ??= Object.assign(document.createElement("optgroup"), { label: it.group }); $("list").appendChild(og);
+  og.appendChild(Object.assign(document.createElement("option"), { value: it.file, textContent: it.name }));
+}
+// files opened from disk get their own entries ("Your files"), so the menu always shows what is playing
+const locals = new Map(); let localGroup = null;
+const current = () => locals.get($("list").value) ?? list.find(x => x.file === $("list").value);
+function play(it, frame) { if (!it) return; if (it.url) open(it.url, it.name, frame); else open("fbx/" + encodeURIComponent(it.file), it.name, frame ?? it.frame); }
+const pick = () => { const it = current(); if (!it) return; const u = new URL(location.href);
+  it.url ? u.searchParams.delete("f") : u.searchParams.set("f", it.file); history.replaceState(null, "", u); play(it); };
+$("list").onchange = pick;
+$("frame").onchange = () => play(current(), $("frame").value);
+function openFile(f) {
+  if (!f) return; const key = "local:" + (locals.size + 1); locals.set(key, { url: URL.createObjectURL(f), name: f.name });
+  if (!localGroup) { localGroup = Object.assign(document.createElement("optgroup"), { label: "Your files" }); $("list").prepend(localGroup); }
+  localGroup.appendChild(Object.assign(document.createElement("option"), { value: key, textContent: f.name }));
+  $("list").value = key; $("file").value = ""; pick();
+}
+$("open").onclick = () => $("file").click(); $("file").onchange = e => openFile(e.target.files[0]);
+addEventListener("dragover", e => { e.preventDefault(); $("drop").style.display = "grid"; });
+addEventListener("dragleave", e => { if (!e.relatedTarget) $("drop").style.display = "none"; });
+addEventListener("drop", e => { e.preventDefault(); $("drop").style.display = "none"; openFile(e.dataTransfer.files[0]); });
+const togglePlay = () => { if (!take) return; if (!playing && t >= take.dur) setTime(take.t0); playing = !playing; $("play").textContent = playing ? "❚❚" : "▶︎"; };
+const step = n => { if (!take) return; playing = false; $("play").textContent = "▶︎"; setTime(t + n / take.fps); };
+$("play").onclick = togglePlay; $("first").onclick = () => setTime(take?.t0 ?? 0); $("prev").onclick = () => step(-1); $("next").onclick = () => step(1);
+$("seek").oninput = e => setTime(+e.target.value);
+addEventListener("keydown", e => {
+  if (e.target.tagName === "SELECT" || e.target.tagName === "INPUT" && e.target.type !== "range") return;
+  if (e.code === "Space") { e.preventDefault(); togglePlay(); }
+  if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); step((e.key === "ArrowRight" ? 1 : -1) * (e.shiftKey ? take?.fps ?? 1 : 1)); }
+});
+const first = list.find(x => x.file === Q.get("f")) ?? list[0];
+if (first) { $("list").value = first.file; pick(); }
+else msg.innerHTML = "<span>No recording in viewer/fbx/ – open your own FBX or drop it into the window</span>";
+
+let last = performance.now();
+renderer.setAnimationLoop(now => {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  if (take && playing) { let s = t + dt * +$("speed").value; if (s > take.dur) s = take.t0; setTime(s); }
+  ctl.update(); renderer.render(scene, cam);
+});
+</script>
+</body></html>

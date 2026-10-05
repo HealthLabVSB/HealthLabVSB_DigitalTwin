@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: >-
+  If you use the Health.Lab Model or visualizations made with it, please cite it as below.
+  Non-commercial use only; see LICENSE.md for the attribution and collaboration terms.
+title: "Health.Lab Model: a photoreal, motion-capture-registered 3D model of a barrier-free apartment"
+type: software
+version: "1.0.8-beta"
+date-released: "2026-10-05"
+authors:
+  - name: "Health.Lab"
+keywords:
+  - digital twin
+  - barrier-free apartment
+  - motion capture
+  - gaussian splatting
+  - 3D model

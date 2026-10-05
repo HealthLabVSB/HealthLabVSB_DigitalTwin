@@ -1,0 +1,7 @@
+numpy
+scipy
+trimesh
+pillow
+matplotlib
+opencv-python
+c3d

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Health.Lab Model – model</title><link rel="stylesheet" href="style.css?v=108">
+<script type="importmap">{"imports": {"three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+</head>
+<body>
+<header><b>Health.Lab Model</b><a id="nav-index" href="index.html">Overview</a><a class="on" id="nav-model" href="model.html">Model</a><a id="nav-hybrid" href="splat.html">Hybrid splat</a><a id="nav-gaussian" href="splat.html?s=original">Gaussian splat</a><a id="nav-fbx" href="fbx.html">Visualize FBX</a><a id="nav-renders" href="renders.html">Renders</a></header>
+<div id="view"></div><div id="msg"><span>Loading the model…</span></div><div class="ver">ver 1.0.8 Beta</div>
+<div class="help">Drag = look around · W A S D / arrows = walk · wheel = forward/back · Q/E = down/up · “Ceiling on/off” switches to the version without a ceiling · Cameras / Mat add the WishCaptury cameras and the blue 2 × 2 m mat by the pillar</div>
+<div class="bar" id="bar"></div>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { loadRig, makeCameras, makeMat, addLights, toggle } from "./rig.js?v=108";
+const view = document.getElementById("view"), msg = document.getElementById("msg"), bar = document.getElementById("bar");
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.NoToneMapping;
+view.appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0xdfe6ee);
+const cam = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.03, 200);
+let yaw = 0, pitch = 0; const pos = new THREE.Vector3();
+function look(p, t) { pos.set(...p); const d = new THREE.Vector3(...t).sub(pos).normalize(); yaw = Math.atan2(-d.x, -d.z); pitch = Math.asin(d.y); }
+function apply() { cam.position.copy(pos); cam.rotation.set(pitch, yaw, 0, "YXZ"); }
+const VER = "108";                                       // bump with every iteration: the browser must not reuse an old model
+const q0 = new URLSearchParams(location.search); const POS = q0.get("table") === "2" ? "_table2" : "";
+const loader = new GLTFLoader(); const models = {}; let ceiling = true;
+function show() { for (const k in models) models[k].visible = (k === "strop") === ceiling; }
+function load(name, url) { return new Promise(res => loader.load(url, g => { models[name] = g.scene; scene.add(g.scene); res(); },
+  e => { if (e.total && name === "strop") msg.innerHTML = `<span>Loading the model… ${Math.round(100 * e.loaded / e.total)} %</span>`; })); }
+const cams = (await (await fetch("views.json?v=" + VER)).json()).gl;
+await load("strop", "flat" + POS + ".glb?v=" + VER); show(); msg.textContent = "";
+load("bez", "flat" + POS + "_no_ceiling.glb?v=" + VER).then(show);
+const q = new URLSearchParams(location.search);
+let first = !(q.get("p") && q.get("t"));
+if (!first) { look(q.get("p").split(",").map(Number), q.get("t").split(",").map(Number)); apply(); }
+for (const [name, [p, t]] of Object.entries(cams)) {
+  const b = document.createElement("button"); b.textContent = name;
+  b.onclick = () => { look(p, t); apply(); bar.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+    if (name === "Top view" && ceiling) { ceiling = false; show(); } };
+  bar.appendChild(b); if (first) { b.click(); first = false; }
+}
+const cb = document.createElement("button"); cb.textContent = "Ceiling on/off"; cb.onclick = () => { ceiling = !ceiling; show(); }; bar.appendChild(cb);
+const sb = document.createElement("button"); sb.textContent = POS ? "Table: position 2 → 1" : "Table: position 1 → 2";
+sb.onclick = () => { const u = new URL(location.href); u.searchParams.set("table", POS ? "1" : "2"); location.href = u.toString(); }; bar.appendChild(sb);
+const rig = await loadRig(VER); addLights(scene);
+const kam = makeCameras(rig), mat = makeMat(rig); scene.add(kam, mat);
+function flag(k, v) { const u = new URL(location.href); v ? u.searchParams.set(k, "1") : u.searchParams.delete(k); history.replaceState(null, "", u); }
+toggle(bar, "Cameras", q0.get("cameras") === "1", v => { kam.visible = v; flag("cameras", v); });
+toggle(bar, "Mat 2 × 2 m", q0.get("mat") === "1", v => { mat.visible = v; flag("mat", v); });
+let drag = null;
+renderer.domElement.addEventListener("pointerdown", e => { drag = [e.clientX, e.clientY]; renderer.domElement.setPointerCapture(e.pointerId); });
+renderer.domElement.addEventListener("pointermove", e => { if (!drag) return;
+  yaw -= (e.clientX - drag[0]) * 0.004; pitch = Math.max(-1.5, Math.min(1.5, pitch - (e.clientY - drag[1]) * 0.004)); drag = [e.clientX, e.clientY]; apply(); });
+addEventListener("pointerup", () => drag = null);
+renderer.domElement.addEventListener("wheel", e => { e.preventDefault(); const f = new THREE.Vector3(); cam.getWorldDirection(f);
+  pos.addScaledVector(f, -e.deltaY * 0.004); apply(); }, { passive: false });
+const keys = new Set(); addEventListener("keydown", e => keys.add(e.key.toLowerCase())); addEventListener("keyup", e => keys.delete(e.key.toLowerCase()));
+let last = performance.now();
+renderer.setAnimationLoop(t => { const dt = Math.min(0.05, (t - last) / 1000); last = t; const v = 1.6 * dt;
+  const f = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)), r = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+  if (keys.has("w") || keys.has("arrowup")) pos.addScaledVector(f, v); if (keys.has("s") || keys.has("arrowdown")) pos.addScaledVector(f, -v);
+  if (keys.has("d") || keys.has("arrowright")) pos.addScaledVector(r, v); if (keys.has("a") || keys.has("arrowleft")) pos.addScaledVector(r, -v);
+  if (keys.has("e")) pos.y += v; if (keys.has("q")) pos.y -= v;
+  apply(); renderer.render(scene, cam); });
+addEventListener("resize", () => { cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+</script>
+</body></html>
