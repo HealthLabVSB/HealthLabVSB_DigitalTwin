@@ -281,11 +281,12 @@ group.matrixAutoUpdate = false; group.matrix.copy(M); group.add(fbx);
   - The side panel gives the radar's position (a, b, height), its heading from +b and its tilt.
   - Other tagged items (measuring devices, fixtures, moving objects) are shown as axes with their names, and an
     object's tags as small squares where they sit on it.
-  - The checkbox **Radar & tags** hides the layer.
+  - The checkbox **Radar & tags** hides the layer. The **×** on the tags box removes it: the file stays under *Your
+    files* and can be shown again, and a `?tags=` link loses its parameter.
 
 **Your own recordings:**
 
-- **One-off:** "Open your own FBX…" or drag a file into the window. The file appears in the menu under *Your files* and stays there until you reload the page, so you can switch between files.
+- **One-off:** "Open your own FBX…" or drag a file into the window. The file appears in the menu under *Your files* and stays there until you reload the page, so you can switch between files. The panel lists these files with what each is doing (*playing*, or *shown* for tags). A file's **×** removes it from the menu and from the view.
 - **Permanent:** copy the FBX to `viewer/fbx/` and add a line to `viewer/fbx/index.json`. The `frame` field is only needed for FBX without cameras.
 
   ```json

@@ -20,6 +20,14 @@
   .player input[type=range] { flex: 1; accent-color: var(--accent); min-width: 80px; }
   .player #time { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--muted); font-size: 13px; }
   .player select { font: inherit; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); padding: 2px 4px; }
+  .side .mine { margin-top: 8px; } .side .mine .h { color: var(--muted); font-size: 12px; margin-bottom: 3px; }
+  .side .mine ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+  .side .mine li { display: flex; gap: 4px; } .side .mine button { width: auto; padding: 3px 8px; font-size: 12px; }
+  .side .mine .name { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+  .side .mine .on .name { border-color: var(--accent); color: var(--accent); } .side .mine .what { color: var(--muted); }
+  .side button.x { width: auto; flex: none; padding: 1px 8px; cursor: pointer; } .side button.x:hover { color: #c2410c; border-color: #c2410c; }
+  .side .tagsbox { position: relative; } .side .tagsbox .x { position: absolute; top: 5px; right: 5px; padding: 0 6px; }
+  .side .tagsbox #tags-info { padding-right: 26px; }
   #drop { position: fixed; inset: 0; z-index: 30; display: none; place-items: center; background: #b5763c55; color: #fff; font-size: 28px; pointer-events: none; }
   @media (max-width: 900px) { .help { display: none; } }
   @media (max-width: 700px) { .side { top: 96px; width: auto; right: 12px; } .side dl { display: none; } }
@@ -33,8 +41,9 @@
   <div class="row"><button id="open">Open your own FBX…</button><select id="frame" title="Coordinate frame for an FBX without cameras">
     <option value="2026-02">frame 2026-02 (WishCap panel)</option><option value="shot_003">frame shot_003 (Captury)</option></select></div>
   <input type="file" id="file" accept=".fbx" hidden>
+  <div class="mine" id="mine" hidden></div>
   <div class="reg" id="reg">–</div>
-  <div class="reg" id="tags-info" hidden></div>
+  <div class="reg tagsbox" id="tags-box" hidden><button class="x" id="tags-x" title="Remove these tags from the view">×</button><div id="tags-info"></div></div>
   <dl>
     <dt>Time</dt><dd id="i-time">–</dd>
     <dt>Room</dt><dd id="i-room">–</dd>
@@ -130,10 +139,11 @@ function dispose() {
   if (!take) return; take.mixer.stopAllAction(); scene.remove(take.root, take.figure, take.trail);
   take.root.traverse(o => { o.geometry?.dispose?.(); }); take = null;
 }
-async function open(url, name, frameHint) {
+async function open(url, name, frameHint, src) {
   playing = false; $("play").textContent = "▶︎"; msg.innerHTML = `<span>Loading ${name}…</span>`;
   let g; try { g = await fbx.loadAsync(url); } catch (e) { msg.innerHTML = `<span>Could not load ${name}: ${e.message ?? e}. Put the file into viewer/fbx/ (see README) or open your own FBX.</span>`; return; }
-  if (isTagsFbx(g)) return openTags(g, name);
+  if (src?.startsWith("local:") && !locals.has(src)) { msg.textContent = ""; return; }   // removed while it loaded
+  if (isTagsFbx(g)) return openTags(g, name, src);
   dispose();
   const clip = g.animations.reduce((a, b) => (b.duration > (a?.duration ?? -1) ? b : a), null);
   const mixer = new THREE.AnimationMixer(g); if (clip) mixer.clipAction(clip).play();
@@ -175,7 +185,7 @@ async function open(url, name, frameHint) {
   for (let s = t0; s <= dur; s += Math.max(0.05, dur / 1500)) { mixer.setTime(s); root.updateMatrixWorld(true); hipsBone.getWorldPosition(v); pts.push(new THREE.Vector3(v.x, 0.012, v.z)); }
   const trail = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xb5763c }));
   trail.visible = trailOn; scene.add(trail);
-  take = { root, g, mixer, bones, links, cyl, ball, figure, skin, trail, dur, fps, hipsBone, name, t0 };
+  take = { root, g, mixer, bones, links, cyl, ball, figure, skin, trail, dur, fps, hipsBone, name, t0, src }; showMine();
   $("seek").min = t0; $("seek").max = dur; $("seek").step = 1 / fps; $("reg").innerHTML = reg; msg.textContent = "";
   lastHips = null; setTime(t0); hipsBone.getWorldPosition(v);
   ctl.target.copy(v); cam.position.copy(v).add(new THREE.Vector3(-0.6, 3.4, 3.0));
@@ -211,10 +221,10 @@ function setTime(s) {
 }
 
 // ---------------------------------------------------------------- a WishCap tags FBX
-async function openTags(g, name) {
+async function openTags(g, name, src) {
   if (tags) { scene.remove(tags.group); tags.dispose(); }
-  tags = await makeTagsLayer(g, "1082"); tags.setVisible(tagsOn); scene.add(tags.group);
-  $("tags-info").innerHTML = describe(tags, name); $("tags-info").hidden = false; msg.textContent = "";
+  tags = await makeTagsLayer(g, "1082"); tags.src = src; tags.setVisible(tagsOn); scene.add(tags.group);
+  $("tags-info").innerHTML = describe(tags, name); $("tags-box").hidden = false; msg.textContent = ""; showMine();
   if (!take) {                                   // nothing else playing: the tags are the clock, the radar the view
     $("seek").min = 0; $("seek").max = tags.dur; $("seek").step = 1 / tags.fps; $("reg").textContent = "–";
     const r = tags.info.radar;
@@ -227,7 +237,7 @@ async function openTags(g, name) {
   setTime(take ? t : 0);
 }
 async function openTagsUrl(url, name) {
-  try { const g = await fbx.loadAsync(url); if (isTagsFbx(g)) await openTags(g, name); else msg.innerHTML = `<span>${name} is not a WishCap tags FBX</span>`; }
+  try { const g = await fbx.loadAsync(url); if (isTagsFbx(g)) await openTags(g, name, "url:" + name); else msg.innerHTML = `<span>${name} is not a WishCap tags FBX</span>`; }
   catch (e) { msg.innerHTML = `<span>Could not load ${name}: ${e.message ?? e}</span>`; }
 }
 
@@ -238,19 +248,59 @@ for (const it of list) {
   og.appendChild(Object.assign(document.createElement("option"), { value: it.file, textContent: it.name }));
 }
 // files opened from disk get their own entries ("Your files"), so the menu always shows what is playing
-const locals = new Map(); let localGroup = null;
+const locals = new Map(); let localGroup = null, nLocal = 0;
 const current = () => locals.get($("list").value) ?? list.find(x => x.file === $("list").value);
-function play(it, frame) { if (!it) return; if (it.url) open(it.url, it.name, frame); else open("fbx/" + encodeURIComponent(it.file), it.name, frame ?? it.frame); }
+function play(it, frame) { if (!it) return; if (it.url) open(it.url, it.name, frame, it.key); else open("fbx/" + encodeURIComponent(it.file), it.name, frame ?? it.frame, it.file); }
 const pick = () => { const it = current(); if (!it) return; const u = new URL(location.href);
   it.url ? u.searchParams.delete("f") : u.searchParams.set("f", it.file); history.replaceState(null, "", u); play(it); };
 $("list").onchange = pick;
 $("frame").onchange = () => play(current(), $("frame").value);
 function openFile(f) {
-  if (!f) return; const key = "local:" + (locals.size + 1); locals.set(key, { url: URL.createObjectURL(f), name: f.name });
+  if (!f) return; const key = "local:" + (++nLocal); locals.set(key, { key, url: URL.createObjectURL(f), name: f.name });
   if (!localGroup) { localGroup = Object.assign(document.createElement("optgroup"), { label: "Your files" }); $("list").prepend(localGroup); }
   localGroup.appendChild(Object.assign(document.createElement("option"), { value: key, textContent: f.name }));
-  $("list").value = key; $("file").value = ""; pick();
+  $("list").value = key; $("file").value = ""; pick(); showMine();
 }
+// ---- taking things out again: a cross per opened file, and one on the tags box
+function clearTake() {
+  dispose(); playing = false; $("play").textContent = "▶︎"; $("reg").textContent = "–";
+  for (const id of ["i-time", "i-room", "i-hips", "i-low"]) $(id).textContent = "–";
+  if (tags) { $("seek").min = 0; $("seek").max = tags.dur; $("seek").step = 1 / tags.fps; setTime(Math.min(t, tags.dur)); }
+  else { $("seek").value = 0; $("time").textContent = "0:00.00 / 0:00.00"; }
+}
+function clearTags() {
+  if (!tags) return; scene.remove(tags.group); tags.dispose(); tags = null; $("tags-box").hidden = true;
+  if (!take) { playing = false; $("play").textContent = "▶︎"; }
+  const u = new URL(location.href); u.searchParams.delete("tags"); history.replaceState(null, "", u);
+}
+function removeLocal(key) {
+  const it = locals.get(key); if (!it) return;
+  if (take?.src === key) clearTake();
+  if (tags?.src === key) clearTags();
+  URL.revokeObjectURL(it.url); locals.delete(key);
+  localGroup?.querySelector(`option[value="${key}"]`)?.remove();
+  if (localGroup && !localGroup.children.length) { localGroup.remove(); localGroup = null; }
+  $("list").value = take?.src ?? "";              // the menu shows what plays, or nothing
+  showMine();
+}
+function showMine() {
+  const box = $("mine"); box.hidden = !locals.size; box.replaceChildren();
+  if (!locals.size) return;
+  box.append(Object.assign(document.createElement("div"), { className: "h", textContent: "Your files" }));
+  const ul = document.createElement("ul");
+  for (const [key, it] of locals) {
+    const li = document.createElement("li"), on = take?.src === key ? "playing" : tags?.src === key ? "shown" : "";
+    if (on) li.className = "on";
+    const name = Object.assign(document.createElement("button"), { className: "name", title: "Show " + it.name });
+    name.append(it.name); if (on) name.append(Object.assign(document.createElement("span"), { className: "what", textContent: " · " + on }));
+    name.onclick = () => { $("list").value = key; pick(); };
+    const x = Object.assign(document.createElement("button"), { className: "x", textContent: "×", title: "Remove " + it.name });
+    x.onclick = () => removeLocal(key);
+    li.append(name, x); ul.append(li);
+  }
+  box.append(ul);
+}
+$("tags-x").onclick = () => { clearTags(); showMine(); };
 $("open").onclick = () => $("file").click(); $("file").onchange = e => openFile(e.target.files[0]);
 addEventListener("dragover", e => { e.preventDefault(); $("drop").style.display = "grid"; });
 addEventListener("dragleave", e => { if (!e.relatedTarget) $("drop").style.display = "none"; });
