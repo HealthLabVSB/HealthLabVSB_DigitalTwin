@@ -243,6 +243,7 @@ group.matrixAutoUpdate = false; group.matrix.copy(M); group.add(fbx);
 | `?ceiling=1` | Ceiling on (Visualize FBX). |
 | `?p=x,y,z&t=x,y,z` | Model: look from point `p` at point `t`, in metres, glTF axes. |
 | `?f=<file>.fbx` | Visualize FBX: the recording to load. |
+| `?tags=<file>.fbx` | Visualize FBX: a WishCap tags FBX from `viewer/fbx/` to show with it (the radar on its stand). |
 | `?s=original` | Splat page: the Gaussian splat. |
 
 ### Visualize FBX
@@ -268,6 +269,19 @@ group.matrixAutoUpdate = false; group.matrix.copy(M); group.add(fbx);
 
 - **Captury FBX** files contain the 12 rig cameras, named by MAC address. The viewer matches them against both calibrations over all axis permutations, signs and units, and keeps the best fit. The demo take (and every take of its dataset that we tested) comes out at **12 cameras, 0.0 mm, calibration shot_003**.
 - **WishCap FBX** files have no cameras. They are read as rig (x, y, z) in mm, and you pick the frame in the menu next to the file button.
+- **WishCap tags FBX** files (`tags.fbx` from WishCaptury's `scripts/track_tags.py`) are already in the model frame, in
+  mm, and say so with an empty node `wishcap_tags`. No registration is applied. They are shown as a layer of their own,
+  which stays when you switch takes and runs on the same clock, so you can open a take and its `tags.fbx` together in
+  either order.
+  - **The radar** (AprilTag 0) is shown on its stand (`viewer/models/radar_stojan.glb`, made by WishCaptury's
+    `scripts/radar_stand.py`): IWR6843AOP on the DCA1000, a single pole and a tripod. The head is placed at the
+    radar's measured frame, which is its antenna, so the green arrow shows where the radar looks. The pole stands
+    vertically under the head and the tripod stands on the floor. The pole is one length for every height; set low,
+    it passes through the tripod and the floor.
+  - The side panel gives the radar's position (a, b, height), its heading from +b and its tilt.
+  - Other tagged items (measuring devices, fixtures, moving objects) are shown as axes with their names, and an
+    object's tags as small squares where they sit on it.
+  - The checkbox **Radar & tags** hides the layer.
 
 **Your own recordings:**
 

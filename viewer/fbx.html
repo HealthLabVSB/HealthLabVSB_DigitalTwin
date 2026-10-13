@@ -34,6 +34,7 @@
     <option value="2026-02">frame 2026-02 (WishCap panel)</option><option value="shot_003">frame shot_003 (Captury)</option></select></div>
   <input type="file" id="file" accept=".fbx" hidden>
   <div class="reg" id="reg">–</div>
+  <div class="reg" id="tags-info" hidden></div>
   <dl>
     <dt>Time</dt><dd id="i-time">–</dd>
     <dt>Room</dt><dd id="i-room">–</dd>
@@ -56,6 +57,7 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { loadRig, makeCameras, makeMat, addLights, toggle, roomAt, ROOM_NAME } from "./rig.js?v=1081";
+import { isTagsFbx, makeTagsLayer, describe } from "./radar.js?v=1082";
 const VER = "1081";
 const $ = id => document.getElementById(id), msg = $("msg"), bar = $("bar");
 const Q = new URLSearchParams(location.search); const POS = Q.get("table") === "2" ? "_table2" : "";
@@ -79,9 +81,13 @@ toggle(bar, "Ceiling", ceiling, v => { ceiling = v; flag("ceiling", v); if (v &&
 toggle(bar, "Cameras", Q.get("cameras") === "1", v => { kam.visible = v; flag("cameras", v); });
 toggle(bar, "Mat 2 × 2 m", Q.get("mat") === "1", v => { mat.visible = v; flag("mat", v); });
 let take = null, playing = false, t = 0, follow = true, trailOn = true, lastHips = null;
+// a WishCap tags FBX (radar, devices, objects) is a layer of its own: it stays while takes are switched
+let tags = null, tagsOn = true;
+const timeline = () => take ?? tags;
 toggle(bar, "Follow the subject", true, v => follow = v);
 const showMesh = toggle(bar, "Body surface", true, v => { if (take?.skin) take.skin.forEach(m => m.visible = v); });
 toggle(bar, "Trail", true, v => { if (take) take.trail.visible = v; trailOn = v; });
+toggle(bar, "Radar & tags", true, v => { tagsOn = v; tags?.setVisible(v); });
 const sb = document.createElement("button"); sb.textContent = POS ? "Table: position 2 → 1" : "Table: position 1 → 2";
 sb.onclick = () => { const u = new URL(location.href); u.searchParams.set("table", POS ? "1" : "2"); location.href = u.toString(); }; bar.appendChild(sb);
 for (const [t, off] of [["Top", [0.01, 5.5, 0.01]], ["Oblique", [-0.6, 3.4, 3.0]], ["Side", [2.2, 0.7, 0]], ["Front", [0, 0.7, 2.2]]]) {
@@ -125,8 +131,10 @@ function dispose() {
   take.root.traverse(o => { o.geometry?.dispose?.(); }); take = null;
 }
 async function open(url, name, frameHint) {
-  dispose(); playing = false; $("play").textContent = "▶︎"; msg.innerHTML = `<span>Loading ${name}…</span>`;
+  playing = false; $("play").textContent = "▶︎"; msg.innerHTML = `<span>Loading ${name}…</span>`;
   let g; try { g = await fbx.loadAsync(url); } catch (e) { msg.innerHTML = `<span>Could not load ${name}: ${e.message ?? e}. Put the file into viewer/fbx/ (see README) or open your own FBX.</span>`; return; }
+  if (isTagsFbx(g)) return openTags(g, name);
+  dispose();
   const clip = g.animations.reduce((a, b) => (b.duration > (a?.duration ?? -1) ? b : a), null);
   const mixer = new THREE.AnimationMixer(g); if (clip) mixer.clipAction(clip).play();
   const bones = []; g.traverse(o => { if (o.isBone) bones.push(o); });
@@ -176,7 +184,12 @@ async function open(url, name, frameHint) {
 const m4 = new THREE.Matrix4(), qa = new THREE.Quaternion(), UP = new THREE.Vector3(0, 1, 0), pa = new THREE.Vector3(), pb = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
 function fmt(s) { const m = Math.floor(s / 60); return `${m}:${(s - 60 * m).toFixed(2).padStart(5, "0")}`; }
 function setTime(s) {
-  if (!take) return; t = Math.max(take.t0, Math.min(take.dur, s));
+  const tl = timeline(); if (!tl) return; t = Math.max(tl.t0, Math.min(tl.dur, s));
+  tags?.setTime(t);
+  if (!take) {
+    $("seek").value = t; $("time").textContent = `${fmt(t)} / ${fmt(tags.dur)}`;
+    $("i-time").textContent = `${t.toFixed(2)} s · frame ${Math.round(t * tags.fps)} (${tags.fps} fps)`; return;
+  }
   take.mixer.setTime(t); take.root.updateMatrixWorld(true);
   let low = Infinity;
   take.bones.forEach((b, i) => { b.getWorldPosition(pa); low = Math.min(low, pa.y); take.ball.setMatrixAt(i, m4.makeTranslation(pa.x, pa.y, pa.z)); });
@@ -195,6 +208,27 @@ function setTime(s) {
   const r = roomAt(rig, h.x, h.z); $("i-room").innerHTML = r ? ROOM_NAME[r] : `<span class="warn">outside the flat</span>`;
   $("i-hips").textContent = `a ${h.x.toFixed(2)} m, b ${(-h.z).toFixed(2)} m, height ${h.y.toFixed(2)} m`;
   $("i-low").innerHTML = Math.abs(low) < 0.06 ? `on the floor (${(low * 100).toFixed(1)} cm)` : `<span class="warn">${Math.abs(low * 100).toFixed(1)} cm ${low < 0 ? "below" : "above"} the floor</span>`;
+}
+
+// ---------------------------------------------------------------- a WishCap tags FBX
+async function openTags(g, name) {
+  if (tags) { scene.remove(tags.group); tags.dispose(); }
+  tags = await makeTagsLayer(g, "1082"); tags.setVisible(tagsOn); scene.add(tags.group);
+  $("tags-info").innerHTML = describe(tags, name); $("tags-info").hidden = false; msg.textContent = "";
+  if (!take) {                                   // nothing else playing: the tags are the clock, the radar the view
+    $("seek").min = 0; $("seek").max = tags.dur; $("seek").step = 1 / tags.fps; $("reg").textContent = "–";
+    const r = tags.info.radar;
+    // look at the radar from in front of it, where its room is, slightly from the side and above
+    if (r) { const f = r.dir.clone().setY(0).normalize(), side = new THREE.Vector3(-f.z, 0, f.x);
+             ctl.target.set(r.p.x, 0.75, r.p.z);
+             cam.position.copy(r.p).addScaledVector(f, 2.2).addScaledVector(side, 0.9).add(new THREE.Vector3(0, 0.7, 0)); }
+    playing = tags.dur > 0; $("play").textContent = playing ? "❚❚" : "▶︎";
+  }
+  setTime(take ? t : 0);
+}
+async function openTagsUrl(url, name) {
+  try { const g = await fbx.loadAsync(url); if (isTagsFbx(g)) await openTags(g, name); else msg.innerHTML = `<span>${name} is not a WishCap tags FBX</span>`; }
+  catch (e) { msg.innerHTML = `<span>Could not load ${name}: ${e.message ?? e}</span>`; }
 }
 
 // ---------------------------------------------------------------- UI
@@ -221,23 +255,26 @@ $("open").onclick = () => $("file").click(); $("file").onchange = e => openFile(
 addEventListener("dragover", e => { e.preventDefault(); $("drop").style.display = "grid"; });
 addEventListener("dragleave", e => { if (!e.relatedTarget) $("drop").style.display = "none"; });
 addEventListener("drop", e => { e.preventDefault(); $("drop").style.display = "none"; openFile(e.dataTransfer.files[0]); });
-const togglePlay = () => { if (!take) return; if (!playing && t >= take.dur) setTime(take.t0); playing = !playing; $("play").textContent = playing ? "❚❚" : "▶︎"; };
-const step = n => { if (!take) return; playing = false; $("play").textContent = "▶︎"; setTime(t + n / take.fps); };
-$("play").onclick = togglePlay; $("first").onclick = () => setTime(take?.t0 ?? 0); $("prev").onclick = () => step(-1); $("next").onclick = () => step(1);
+const togglePlay = () => { const tl = timeline(); if (!tl) return; if (!playing && t >= tl.dur) setTime(tl.t0); playing = !playing; $("play").textContent = playing ? "❚❚" : "▶︎"; };
+const step = n => { const tl = timeline(); if (!tl) return; playing = false; $("play").textContent = "▶︎"; setTime(t + n / tl.fps); };
+$("play").onclick = togglePlay; $("first").onclick = () => setTime(timeline()?.t0 ?? 0); $("prev").onclick = () => step(-1); $("next").onclick = () => step(1);
 $("seek").oninput = e => setTime(+e.target.value);
 addEventListener("keydown", e => {
   if (e.target.tagName === "SELECT" || e.target.tagName === "INPUT" && e.target.type !== "range") return;
   if (e.code === "Space") { e.preventDefault(); togglePlay(); }
-  if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); step((e.key === "ArrowRight" ? 1 : -1) * (e.shiftKey ? take?.fps ?? 1 : 1)); }
+  if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); step((e.key === "ArrowRight" ? 1 : -1) * (e.shiftKey ? timeline()?.fps ?? 1 : 1)); }
 });
-const first = list.find(x => x.file === Q.get("f")) ?? list[0];
+const first = list.find(x => x.file === Q.get("f")) ?? (Q.get("tags") ? null : list[0]);
 if (first) { $("list").value = first.file; pick(); }
-else msg.innerHTML = "<span>No recording in viewer/fbx/ – open your own FBX or drop it into the window</span>";
+else if (!Q.get("tags")) msg.innerHTML = "<span>No recording in viewer/fbx/ – open your own FBX or drop it into the window</span>";
+// ?tags=<file in viewer/fbx/>: a WishCap tags FBX (the radar on its stand, devices, objects) shown with the take
+if (Q.get("tags")) openTagsUrl("fbx/" + encodeURIComponent(Q.get("tags")), Q.get("tags"));
 
 let last = performance.now();
 renderer.setAnimationLoop(now => {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
-  if (take && playing) { let s = t + dt * +$("speed").value; if (s > take.dur) s = take.t0; setTime(s); }
+  const tl = timeline();
+  if (tl && playing) { let s = t + dt * +$("speed").value; if (s > tl.dur) s = tl.t0; setTime(s); }
   ctl.update(); renderer.render(scene, cam);
 });
 </script>
