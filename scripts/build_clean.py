@@ -426,11 +426,11 @@ for ca in (-0.05, 0.75): box(ca, ca + mtr(0.55), -4.66, -4.62, DT_W + mtr(0.13),
 cyl(-3.70, -2.72, mtr(0.16), 0.0, mtr(0.32), POT, "kvetinac"); sphere(-3.70, -2.72, mtr(1.0), mtr(0.35), PLANT, "kytka")   # ficus by the TV wall
 cyl(-3.85, -0.05, mtr(0.10), 0.0, mtr(0.22), POT, "kvetinac"); sphere(-3.85, -0.05, mtr(0.50), mtr(0.21), PLANT, "kytka")   # small plant at the window (splat)
 # bedroom
-for b0 in (1.50, 4.10):
+for b0 in (1.50, 4.3852):                     # 1.0.9: the north bed against the north wall
     box(-4.05, -2.05, b0, b0 + 0.90, 0.0, 0.30, WHITE_F, "postel"); box(-4.00, -2.10, b0 + 0.03, b0 + 0.87, 0.30, 0.48, (238, 238, 236), "matrace")
     box(-3.55, -2.08, b0 + 0.02, b0 + 0.88, 0.48, 0.52, BLUE, "prikryvka"); box(-3.98, -3.62, b0 + 0.12, b0 + 0.78, 0.48, 0.60, (250, 250, 248), "polstar")
     box(-4.07, -3.99, b0, b0 + 0.90, 0.30, 0.85, WHITE_F, "celo_postele")
-for b0 in (2.52, 3.70): box(-3.96, -3.60, b0, b0 + 0.38, 0.0, 0.50, WHITE_F, "nocni_stolek")   # current splat: desk between them
+for b0 in (2.52, 3.9852): box(-3.96, -3.60, b0, b0 + 0.38, 0.0, 0.50, WHITE_F, "nocni_stolek")   # current splat: desk between them; 1.0.9: the north one moved with its bed
 # built-in wardrobe at the back of the niche (splat: doors in the plane a -0.75, b 2.74-4.34, 2.60 m high), three doors;
 # the 0.9 m deep niche in front of it is free floor (Dan: from the corner by the door, three doors)
 SAT_A0, SAT_B0, SAT_B1, SAT_H = -0.775, 2.67, 4.38, 2.03

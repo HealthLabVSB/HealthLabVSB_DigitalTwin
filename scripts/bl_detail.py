@@ -846,11 +846,13 @@ def leaf_print(name):
     set_(p, **{"Roughness": 1.0, "Sheen Weight": 0.5}); return fabric_bump(m, 1100, 0.12)
 LEAFP = leaf_print("povleceni_listy")
 # beds measured on the splat in metres (iterace 06): 2.0 m long incl. headboard, 1.0 m wide, headboard on the west wall;
-# the bed by the door ends 0.39 m before the door jamb (it used to run 0.6 m into the doorway)
+# the bed by the door ends 0.39 m before the door jamb (it used to run 0.6 m into the doorway).
+# 1.0.9: the north bed stands against the north wall, as in the rig cameras (Dan): +0.334 m from 4.605,
+# its duvet 5 mm short of the wall; its nightstand and the router on it moved with it.
 begin("MET")
 XW_ = -4.09 * S + 0.003                                              # west wall, metres
 SOKL = pmat("sokl", srgb(90, 90, 92), 0.6)
-for yc_, inner in ((1.965, 1), (4.605, -1)):                         # bed centres (splat, units)
+for yc_, inner in ((1.965, 1), (4.8902, -1)):                         # bed centres (splat, units)
     y0, y1 = yc_ * S - 0.46, yc_ * S + 0.46
     x0, x1 = XW_, XW_ + 2.04                                            # 2.04 m: ends 10 cm before the door frame
     cube("celo_postele", x0, x0 + 0.07, y0 - 0.01, y1 + 0.01, 0.05, 0.86, PAINT_W, bev=0.01)
@@ -874,7 +876,7 @@ for yy_ in (3.00, 3.62):
     cube("stul_okno_noha", -3.82, -3.78, yy_ - 0.02, yy_ + 0.02, 0.0, 0.72, STEEL)
     cube("stul_okno_noha", -4.00, -3.58, yy_ - 0.02, yy_ + 0.02, 0.0, 0.03, STEEL)
 end()
-begin("FX", -3.78, 3.89, 0.50); cube("router", -3.90, -3.66, 3.80, 3.98, 0.50, 0.56, pmat("modra_krabicka", srgb(60, 110, 190), 0.4), bev=0.005); end()
+begin("FX", -3.78, 4.1752, 0.50); cube("router", -3.90, -3.66, 4.0852, 4.2652, 0.50, 0.56, pmat("modra_krabicka", srgb(60, 110, 190), 0.4), bev=0.005); end()
 # desk + monitor + white chair at the north wall, by the wardrobe
 begin("SXY")
 cube("stul_sever", -2.03, -1.10, 4.74, 5.29, 0.72, 0.745, PAINT_W, bev=0.004)                  # splat: against the north wall
@@ -892,7 +894,7 @@ cube("zidle_bila", -1.76, -1.34, 4.35, 4.75, 0.44, 0.47, CH, bev=0.02, seg=3)
 cube("zidle_bila", -1.76, -1.34, 4.33, 4.38, 0.47, 0.88, CH, bev=0.02, seg=3)                 # back away from the desk
 for xx_, yy_ in ((-1.74, 4.37), (-1.36, 4.37), (-1.74, 4.73), (-1.36, 4.73)): cyl("zidle_bila", xx_, yy_, 0.0, 0.445, 0.012, STEEL, seg=12)
 end()
-for yc in (2.71, 3.89):
+for yc in (2.71, 4.1752):
     cube("nocni_spara", -3.600, -3.596, yc - 0.18, yc + 0.18, 0.328, 0.332, pmat("spara2", srgb(160, 160, 160), 0.6))
     cyl("nocni_knopka", yc, 0.41, -3.596, -3.58, 0.012, STEEL, axis="X")
 for yc in (2.71,):                                                       # lamp only on the bed-side stand (current)

@@ -23,7 +23,7 @@ for n, poly in rooms.items():
 def rect(a0, a1, b0, b1, lab="", fc="#dbeafe", ec="#1e3a8a"):
     ax.add_patch(Rectangle((a0 * S, b0 * S), (a1 - a0) * S, (b1 - b0) * S, fc=fc, ec=ec, lw=1))
     if lab: ax.text((a0 + a1) / 2 * S, (b0 + b1) / 2 * S, lab, ha="center", va="center", fontsize=8)
-for yc in (1.965, 4.605): rect(-4.09, -4.09 + 2.04 / S, yc - 0.46 / S, yc + 0.46 / S, T("postel 2,04 × 0,92", "bed 2.04 × 0.92"))
+for yc in (1.965, 4.8902): rect(-4.09, -4.09 + 2.04 / S, yc - 0.46 / S, yc + 0.46 / S, T("postel 2,04 × 0,92", "bed 2.04 × 0.92"))
 rect(-0.775, -0.775 + 0.60 / S, 2.67, 4.38, T("skříň\n2,0 × 0,6", "wardrobe\n2.0 × 0.6"), fc="#fef3c7", ec="#92400e")
 TC1 = (0.42 / 1.2779, -4.40 / 1.2779); TC2 = (-3.0, -3.62)
 for (a, b), lab, cc in ((TC1, T("stůl – pozice 1", "table – position 1"), "#16a34a"), (TC2, T("stůl – pozice 2", "table – position 2"), "#9333ea")):

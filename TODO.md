@@ -1,5 +1,21 @@
 # TODO
 
+## The north bed in the bedroom against the north wall
+
+*Czech: severní postel v pokojíčku ke zdi.*
+
+**Status:** the model is done (2026-10-13); the renders, the splats and the floor plan still show 1.0.8.
+
+The north bed stood 0.37 m off the north wall. Bedroom cameras 0–3 show it against the wall (Dan noticed it in the
+WishCap panel). It moved 0.334 m north, its duvet now 5 mm short of the wall, and its nightstand with the router on it
+moved with it, so the gap between them is unchanged. Changed: `scripts/bl_detail.py`, `scripts/build_clean.py`,
+`scripts/plan_m.py`, the six `.blend` files, and the twelve baked GLBs (re-baked from the `.blend` files with the
+original atlas layout: size 4096, density 160, 256 spp; `_captury` reframed with `blender_matrix_captury_fbx`).
+
+- [ ] Re-render the bedroom views (`render_bedroom*`, `render_dollhouse`) and the README images made from them.
+- [ ] Re-sample the hybrid splats (`hybrid_splat.py`, then `to_splat.py`); they are sampled from the model.
+- [ ] Redraw `renders/floor_plan_metres.png` (`plan_m.py` needs `klekz_pts.json` and `c3d_frames.npy`).
+
 ## More precise alignment of the cameras with the flat
 
 *Czech: přesnější zarovnání kamer s bytem.*
