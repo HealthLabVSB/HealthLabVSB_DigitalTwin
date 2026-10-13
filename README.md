@@ -257,7 +257,7 @@ group.matrixAutoUpdate = false; group.matrix.copy(M); group.add(fbx);
 
 **Panels and options:**
 
-- The info panel shows time and frame, the room, the hips position and **the lowest joint relative to the floor**, a quick check that a take sits right.
+- The info panel shows time and frame (the frame rate in its tooltip), the room, the hips position and **the lowest joint relative to the floor**, a quick check that a take sits right. Its values keep their width while a take plays, so the panel does not shift.
 - Options:
   - follow the subject;
   - body surface (the Captury mesh);
@@ -287,6 +287,7 @@ group.matrixAutoUpdate = false; group.matrix.copy(M); group.add(fbx);
 **Your own recordings:**
 
 - **One-off:** "Open your own FBX…" or drag a file into the window. The file appears in the menu under *Your files* and stays there until you reload the page, so you can switch between files. The panel lists these files with what each is doing (*playing*, or *shown* for tags). A file's **×** removes it from the menu and from the view.
+- **The playing recording**, wherever it came from (the demo too), has an **×** on its registration box. It takes the recording off the view and out of the link; the menu keeps it.
 - **Permanent:** copy the FBX to `viewer/fbx/` and add a line to `viewer/fbx/index.json`. The `frame` field is only needed for FBX without cameras.
 
   ```json

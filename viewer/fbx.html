@@ -8,7 +8,8 @@
           border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
   .side select, .side button { font: inherit; width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
   .side .row { display: flex; gap: 6px; margin-top: 6px; } .side .row > * { flex: 1; }
-  .side dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 10px 0 0; } .side dt { color: var(--muted); } .side dd { margin: 0; }
+  .side dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; margin: 10px 0 0; font-variant-numeric: tabular-nums; }
+  .side dt { color: var(--muted); } .side dd { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .side .reg { margin-top: 8px; padding: 6px 8px; border-radius: 6px; background: var(--bg); color: var(--muted); }
   .side .reg b { color: var(--ink); } .side .warn { color: #c2410c; }
   .side .opts { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; position: static; }
@@ -26,8 +27,8 @@
   .side .mine .name { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
   .side .mine .on .name { border-color: var(--accent); color: var(--accent); } .side .mine .what { color: var(--muted); }
   .side button.x { width: auto; flex: none; padding: 1px 8px; cursor: pointer; } .side button.x:hover { color: #c2410c; border-color: #c2410c; }
-  .side .tagsbox { position: relative; } .side .tagsbox .x { position: absolute; top: 5px; right: 5px; padding: 0 6px; }
-  .side .tagsbox #tags-info { padding-right: 26px; }
+  .side .closable { position: relative; } .side .closable .x { position: absolute; top: 5px; right: 5px; padding: 0 6px; }
+  .side .closable > div { padding-right: 26px; }
   #drop { position: fixed; inset: 0; z-index: 30; display: none; place-items: center; background: #b5763c55; color: #fff; font-size: 28px; pointer-events: none; }
   @media (max-width: 900px) { .help { display: none; } }
   @media (max-width: 700px) { .side { top: 96px; width: auto; right: 12px; } .side dl { display: none; } }
@@ -42,8 +43,8 @@
     <option value="2026-02">frame 2026-02 (WishCap panel)</option><option value="shot_003">frame shot_003 (Captury)</option></select></div>
   <input type="file" id="file" accept=".fbx" hidden>
   <div class="mine" id="mine" hidden></div>
-  <div class="reg" id="reg">–</div>
-  <div class="reg tagsbox" id="tags-box" hidden><button class="x" id="tags-x" title="Remove these tags from the view">×</button><div id="tags-info"></div></div>
+  <div class="reg closable" id="take-box"><button class="x" id="take-x" title="Remove this recording from the view" hidden>×</button><div id="reg">–</div></div>
+  <div class="reg closable" id="tags-box" hidden><button class="x" id="tags-x" title="Remove these tags from the view">×</button><div id="tags-info"></div></div>
   <dl>
     <dt>Time</dt><dd id="i-time">–</dd>
     <dt>Room</dt><dd id="i-room">–</dd>
@@ -186,19 +187,28 @@ async function open(url, name, frameHint, src) {
   const trail = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xb5763c }));
   trail.visible = trailOn; scene.add(trail);
   take = { root, g, mixer, bones, links, cyl, ball, figure, skin, trail, dur, fps, hipsBone, name, t0, src }; showMine();
-  $("seek").min = t0; $("seek").max = dur; $("seek").step = 1 / fps; $("reg").innerHTML = reg; msg.textContent = "";
+  $("seek").min = t0; $("seek").max = dur; $("seek").step = 1 / fps; $("reg").innerHTML = reg; $("take-x").hidden = false; msg.textContent = "";
   lastHips = null; setTime(t0); hipsBone.getWorldPosition(v);
   ctl.target.copy(v); cam.position.copy(v).add(new THREE.Vector3(-0.6, 3.4, 3.0));
   playing = dur > 0; $("play").textContent = playing ? "❚❚" : "▶︎";
 }
 const m4 = new THREE.Matrix4(), qa = new THREE.Quaternion(), UP = new THREE.Vector3(0, 1, 0), pa = new THREE.Vector3(), pb = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
 function fmt(s) { const m = Math.floor(s / 60); return `${m}:${(s - 60 * m).toFixed(2).padStart(5, "0")}`; }
+// Values in the table keep their width while they play: always a sign, fixed decimals, and counters padded with
+// figure spaces (as wide as a digit) - otherwise every "-" and every extra digit shifted the line and the panel danced.
+const FIG = "\u2007";
+function signed(v, dec, width = 1) { return (v < 0 ? "−" : "+") + Math.abs(v).toFixed(dec).padStart(width + 1 + dec, FIG); }
+function clock(s, tl) {                           // the frame rate goes to the tooltip: the line must fit the panel
+  const total = Math.round(tl.dur * tl.fps), w = String(total).length;
+  $("i-time").title = `${tl.fps} fps`;
+  return `${s.toFixed(2).padStart(String(Math.floor(tl.dur)).length + 3, FIG)} s · frame ${String(Math.round(s * tl.fps)).padStart(w, FIG)} / ${total}`;
+}
 function setTime(s) {
   const tl = timeline(); if (!tl) return; t = Math.max(tl.t0, Math.min(tl.dur, s));
   tags?.setTime(t);
   if (!take) {
     $("seek").value = t; $("time").textContent = `${fmt(t)} / ${fmt(tags.dur)}`;
-    $("i-time").textContent = `${t.toFixed(2)} s · frame ${Math.round(t * tags.fps)} (${tags.fps} fps)`; return;
+    $("i-time").textContent = clock(t, tags); return;
   }
   take.mixer.setTime(t); take.root.updateMatrixWorld(true);
   let low = Infinity;
@@ -214,10 +224,11 @@ function setTime(s) {
   lastHips = h;
   $("seek").value = t; const fr = Math.round(t * take.fps);
   $("time").textContent = `${fmt(t)} / ${fmt(take.dur)}`;
-  $("i-time").textContent = `${t.toFixed(2)} s · frame ${fr} / ${Math.round(take.dur * take.fps)} (${take.fps} fps)`;
+  $("i-time").textContent = clock(t, take);
   const r = roomAt(rig, h.x, h.z); $("i-room").innerHTML = r ? ROOM_NAME[r] : `<span class="warn">outside the flat</span>`;
-  $("i-hips").textContent = `a ${h.x.toFixed(2)} m, b ${(-h.z).toFixed(2)} m, height ${h.y.toFixed(2)} m`;
-  $("i-low").innerHTML = Math.abs(low) < 0.06 ? `on the floor (${(low * 100).toFixed(1)} cm)` : `<span class="warn">${Math.abs(low * 100).toFixed(1)} cm ${low < 0 ? "below" : "above"} the floor</span>`;
+  $("i-hips").textContent = `a ${signed(h.x, 2)} m · b ${signed(-h.z, 2)} m · h ${h.y.toFixed(2)} m`;
+  const lowCm = `${signed(low * 100, 1, 2)} cm`;
+  $("i-low").innerHTML = Math.abs(low) < 0.06 ? `${lowCm} · on the floor` : `<span class="warn">${lowCm} · ${low < 0 ? "below" : "above"} the floor</span>`;
 }
 
 // ---------------------------------------------------------------- a WishCap tags FBX
@@ -263,7 +274,7 @@ function openFile(f) {
 }
 // ---- taking things out again: a cross per opened file, and one on the tags box
 function clearTake() {
-  dispose(); playing = false; $("play").textContent = "▶︎"; $("reg").textContent = "–";
+  dispose(); playing = false; $("play").textContent = "▶︎"; $("reg").textContent = "–"; $("take-x").hidden = true;
   for (const id of ["i-time", "i-room", "i-hips", "i-low"]) $(id).textContent = "–";
   if (tags) { $("seek").min = 0; $("seek").max = tags.dur; $("seek").step = 1 / tags.fps; setTime(Math.min(t, tags.dur)); }
   else { $("seek").value = 0; $("time").textContent = "0:00.00 / 0:00.00"; }
@@ -301,6 +312,11 @@ function showMine() {
   box.append(ul);
 }
 $("tags-x").onclick = () => { clearTags(); showMine(); };
+// the cross on the playing recording: off the view, whatever it came from; a link no longer loads it
+$("take-x").onclick = () => {
+  clearTake(); $("list").value = ""; showMine();
+  const u = new URL(location.href); u.searchParams.delete("f"); history.replaceState(null, "", u);
+};
 $("open").onclick = () => $("file").click(); $("file").onchange = e => openFile(e.target.files[0]);
 addEventListener("dragover", e => { e.preventDefault(); $("drop").style.display = "grid"; });
 addEventListener("dragleave", e => { if (!e.relatedTarget) $("drop").style.display = "none"; });
