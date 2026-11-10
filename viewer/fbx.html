@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Health.Lab Model – Visualize FBX</title><link rel="stylesheet" href="style.css?v=1084">
+<title>Health.Lab Model – Visualize FBX</title><link rel="stylesheet" href="style.css?v=1085">
 <script type="importmap">{"imports": {"three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
   "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 <style>
@@ -48,7 +48,7 @@
 <body>
 <header><b>Health.Lab Model</b><a id="nav-index" href="index.html">Overview</a><a id="nav-model" href="model.html">Model</a><a id="nav-hybrid" href="splat.html">Hybrid splat</a><a id="nav-gaussian" href="splat.html?s=original">Gaussian splat</a><a class="on" id="nav-fbx" href="fbx.html">Visualize FBX</a><a id="nav-renders" href="renders.html">Renders</a></header>
 <div id="view"></div>
-<div id="pinview"><div class="pinbar"><span>Fixed joint: <b id="pin-name">–</b></span><span class="grow">the body moves around it</span><label title="Also take out the joint's turning about the vertical"><input type="checkbox" id="pin-yaw"> lock heading</label><button id="pin-x" title="Release the joint (or click it again)">× release</button></div></div>
+<div id="pinview"><div class="pinbar"><span>Fixed joint: <b id="pin-name">–</b></span><span class="grow">the body moves around it</span><label title="Also take out the joint's turning about the vertical"><input type="checkbox" id="pin-yaw"> lock heading</label><button id="pin-csv" title="Save this joint for every frame of the take as CSV">⬇ CSV</button><button id="pin-x" title="Release the joint (or click it again)">× release</button></div></div>
 <div id="msg"><span>Loading the flat…</span></div><div id="drop">Drop the FBX here</div><div class="ver">ver 1.0.8 Beta</div>
 <div class="side">
   <select id="list"></select>
@@ -79,9 +79,9 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { loadRig, makeCameras, makeMat, addLights, toggle, roomAt, ROOM_NAME } from "./rig.js?v=1084";
-import { isTagsFbx, makeTagsLayer, describe } from "./radar.js?v=1084";
-const VER = "1084";
+import { loadRig, makeCameras, makeMat, addLights, toggle, roomAt, ROOM_NAME } from "./rig.js?v=1085";
+import { isTagsFbx, makeTagsLayer, describe } from "./radar.js?v=1085";
+const VER = "1085";
 const $ = id => document.getElementById(id), msg = $("msg"), bar = $("bar");
 const Q = new URLSearchParams(location.search); const POS = Q.get("table") === "2" ? "_table2" : "";
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -130,6 +130,24 @@ function setPin(i) {
   pinCtl.target.copy(mid); pinCam.position.copy(mid).add(new THREE.Vector3(2.2, 0.7, 2.6));
 }
 $("pin-x").onclick = () => setPin(null);
+// the fixed joint over the whole take as CSV: position in the flat (model metres, a / b / height), in the take's own rig
+// frame (mm, Y up, as in the FBX/C3D), its heading, and its distance from the hips
+$("pin-csv").onclick = () => {
+  if (!pin || !take) return;
+  const b = take.bones[pin.i], name = jointName(b), toRig = toModel(take.cal).invert(), keep = t, rows = [];
+  rows.push(["time_s", "frame", "a_m", "b_m", "height_m", "rig_x_mm", "rig_y_mm", "rig_z_mm", "heading_deg", "dist_from_hips_m"].join(","));
+  for (let k = Math.round(take.t0 * take.fps); k <= Math.round(take.dur * take.fps); k++) {
+    const s = k / take.fps; take.mixer.setTime(s); take.root.updateMatrixWorld(true);
+    const p = b.getWorldPosition(new THREE.Vector3()), r = p.clone().applyMatrix4(toRig).multiplyScalar(1000);
+    const hd = take.hipsBone.getWorldPosition(new THREE.Vector3()).distanceTo(p);
+    rows.push([s.toFixed(4), k, p.x.toFixed(4), (-p.z).toFixed(4), p.y.toFixed(4), r.x.toFixed(1), r.y.toFixed(1), r.z.toFixed(1),
+               (boneYaw(b) * 180 / Math.PI).toFixed(2), hd.toFixed(4)].join(","));
+  }
+  setTime(keep);
+  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([rows.join("\n") + "\n"], { type: "text/csv" })),
+    download: `${take.name.replace(/\.fbx$/i, "")}_${name}.csv` });
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
 $("pin-yaw").onchange = () => { if (pin) { pin.yaw0 = boneYaw(take.bones[pin.i]); setTime(t); } };
 // click (not drag) on a joint: fix it, or release it when it is the fixed one
 function pickJoint(e, el, camera, pts) {
@@ -224,9 +242,9 @@ async function open(url, name, frameHint, src) {
   mixer.setTime(Math.min(1, (clip?.duration ?? 0) / 2)); g.updateMatrixWorld(true);
   const raw = []; g.traverse(o => { if (o.isCamera && /^[0-9a-f]{12}$/i.test(o.name)) raw.push({ mac: o.name.toLowerCase(), p: o.getWorldPosition(new THREE.Vector3()).toArray() }); });
   const fit = raw.length >= 3 ? fitCameras(raw) : null;
-  let M, reg;
+  let M, reg, calUsed;
   if (fit && fit.rms < 0.3) {
-    M = toModel(fit.cal).multiply(rawToRig(fit.pm, fit.s, fit.t)); $("frame").value = fit.cal; $("frame").disabled = true;
+    M = toModel(fit.cal).multiply(rawToRig(fit.pm, fit.s, fit.t)); $("frame").value = fit.cal; $("frame").disabled = true; calUsed = fit.cal;
     reg = `<b>Registered by the ${fit.n} cameras in the FBX</b><br>calibration ${fit.cal === "shot_003" ? "shot_003 (Captury)" : "2026-02 (WishCap panel)"}, camera error ${(fit.rms * 1000).toFixed(1)} mm`;
   } else {
     // WishCap takes are in the panel calibration (2026-02) unless the user picks another frame for this file; never
@@ -247,7 +265,7 @@ async function open(url, name, frameHint, src) {
       auto[c] = (ins + 0.5 * onFloor) / (1.5 * N);
     }
     const best = auto["shot_003"] > auto["2026-02"] + 0.05 ? "shot_003" : "2026-02";
-    const cal = frameHint ?? best; $("frame").value = cal; $("frame").disabled = false;
+    const cal = frameHint ?? best; $("frame").value = cal; $("frame").disabled = false; calUsed = cal;
     M = toModel(cal).multiply(new THREE.Matrix4().makeScale(sc, sc, sc));
     reg = `<b>FBX without cameras</b> – read as rig (x, y, z), units ${sc === 0.001 ? "mm" : sc === 0.01 ? "cm" : "m"}, frame ${cal}`
         + (frameHint ? " (picked by hand)" : ` (chosen automatically: fits the flat ${Math.round(auto[cal] * 100)} % vs ${Math.round(auto[cal === "2026-02" ? "shot_003" : "2026-02"] * 100)} %)`)
@@ -261,7 +279,7 @@ async function open(url, name, frameHint, src) {
   const cyl = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.022, 0.022, 1, 10), BONE, links.length);
   const ball = new THREE.InstancedMesh(new THREE.SphereGeometry(0.035, 14, 10), JOINT, bones.length);
   cyl.frustumCulled = ball.frustumCulled = false; figure.add(cyl, ball); scene.add(figure);
-  const dur = clip?.duration ?? 0, tr = clip?.tracks[0]?.times ?? [0, 1];
+  let dur = clip?.duration ?? 0; const tr = clip?.tracks[0]?.times ?? [0, 1];
   const dts = []; for (let i = 1; i < tr.length; i++) dts.push(tr[i] - tr[i - 1]); dts.sort((a, b) => a - b);
   const fps = dts.length ? Math.round(1 / dts[dts.length >> 1]) : 30;
   // the hips' path over the whole take, drawn just above the floor
@@ -271,10 +289,12 @@ async function open(url, name, frameHint, src) {
   const hipsAt = s => { mixer.setTime(s); root.updateMatrixWorld(true); return hipsBone.getWorldPosition(new THREE.Vector3()); };
   for (let i = 0; i < Math.min(10, kt.length - 1); i++) if (hipsAt(kt[i]).distanceTo(hipsAt(kt[i + 1])) > 0.5) t0 = kt[i + 1];
   if (t0) reg += `<br>opening rest pose at the origin (until ${t0.toFixed(2)} s) skipped`;
+  // ... and close with one: end before the last jump in the final keys
+  for (let i = kt.length - 1; i > Math.max(0, kt.length - 10); i--) if (hipsAt(kt[i - 1]).distanceTo(hipsAt(kt[i])) > 0.5) { dur = kt[i - 1]; break; }
   for (let s = t0; s <= dur; s += Math.max(0.05, dur / 1500)) { mixer.setTime(s); root.updateMatrixWorld(true); hipsBone.getWorldPosition(v); pts.push(new THREE.Vector3(v.x, 0.012, v.z)); }
   const trail = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xb5763c }));
   trail.visible = trailOn; scene.add(trail);
-  take = { root, g, mixer, bones, links, cyl, ball, figure, skin, trail, dur, fps, hipsBone, name, t0, src }; showMine();
+  take = { root, g, mixer, bones, links, cyl, ball, figure, skin, trail, dur, fps, hipsBone, name, t0, src, cal: calUsed }; showMine();
   $("seek").min = t0; $("seek").max = dur; $("seek").step = 1 / fps; $("reg").innerHTML = reg; $("take-x").hidden = false; msg.textContent = "";
   lastHips = null; setTime(t0); hipsBone.getWorldPosition(v);
   ctl.target.copy(v); cam.position.copy(v).add(new THREE.Vector3(-0.6, 3.4, 3.0));

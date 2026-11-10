@@ -265,6 +265,7 @@ group.matrixAutoUpdate = false; group.matrix.copy(M); group.add(fbx);
   - ceiling, cameras, mat, table position;
   - top / oblique / side / front views.
 - **Fixed joint:** click a joint (e.g. the hips) to fix it. The screen splits: the left half keeps the flat, and the right half shows the body moving around the fixed joint, which stays at the origin. *Lock heading* also takes out the joint's turning about the vertical. Click the joint again, or *× release*, to go back to one view.
+- **CSV of the fixed joint:** *⬇ CSV* in the split view saves the joint for every frame of the take. Columns: `time_s, frame`, the position in the flat (`a_m, b_m, height_m`, model frame), the position in the take's own rig frame (`rig_x_mm, rig_y_mm, rig_z_mm`, Y up, as in the FBX/C3D), its heading (`heading_deg`) and its distance from the hips (`dist_from_hips_m`). The file uses commas and decimal points.
 
 **Registration:**
 
