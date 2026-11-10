@@ -264,6 +264,7 @@ group.matrixAutoUpdate = false; group.matrix.copy(M); group.add(fbx);
   - hips trail on the floor;
   - ceiling, cameras, mat, table position;
   - top / oblique / side / front views.
+- **Fixed joint:** click a joint (e.g. the hips) to fix it. The screen splits: the left half keeps the flat, and the right half shows the body moving around the fixed joint, which stays at the origin. *Lock heading* also takes out the joint's turning about the vertical. Click the joint again, or *× release*, to go back to one view.
 
 **Registration:**
 

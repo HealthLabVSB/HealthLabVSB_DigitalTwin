@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Health.Lab Model – Visualize FBX</title><link rel="stylesheet" href="style.css?v=1082">
+<title>Health.Lab Model – Visualize FBX</title><link rel="stylesheet" href="style.css?v=1084">
 <script type="importmap">{"imports": {"three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
   "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 <style>
@@ -30,13 +30,26 @@
   .side .closable { position: relative; } .side .closable .x { position: absolute; top: 5px; right: 5px; padding: 0 6px; }
   .side .closable > div { padding-right: 26px; }
   #drop { position: fixed; inset: 0; z-index: 30; display: none; place-items: center; background: #b5763c55; color: #fff; font-size: 28px; pointer-events: none; }
+  /* fixed-joint mode: the screen splits, the right half shows the body relative to the fixed joint */
+  #pinview { position: fixed; top: 0; bottom: 0; left: 50%; right: 0; display: none; border-left: 2px solid var(--accent); background: #e9eef3; }
+  body.split #view { right: 50%; } body.split #pinview { display: block; } body.split .help { display: none; }
+  #pinview canvas { display: block; }
+  #pinview .pinbar { position: absolute; top: 56px; left: 12px; right: 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+                     background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; font-size: 13px; }
+  #pinview .pinbar b { color: var(--accent); } #pinview .pinbar .grow { flex: 1; color: var(--muted); }
+  #pinview .pinbar button { font: inherit; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); cursor: pointer; padding: 1px 8px; }
+  #pinview .pinbar button:hover { color: #c2410c; border-color: #c2410c; }
+  #pinview .pinbar label { display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
+  @media (max-width: 800px) { body.split #view { right: 0; bottom: 50%; } #pinview { left: 0; top: 50%; border-left: 0; border-top: 2px solid var(--accent); } #pinview .pinbar { top: 8px; } }
   @media (max-width: 900px) { .help { display: none; } }
   @media (max-width: 700px) { .side { top: 96px; width: auto; right: 12px; } .side dl { display: none; } }
 </style>
 </head>
 <body>
 <header><b>Health.Lab Model</b><a id="nav-index" href="index.html">Overview</a><a id="nav-model" href="model.html">Model</a><a id="nav-hybrid" href="splat.html">Hybrid splat</a><a id="nav-gaussian" href="splat.html?s=original">Gaussian splat</a><a class="on" id="nav-fbx" href="fbx.html">Visualize FBX</a><a id="nav-renders" href="renders.html">Renders</a></header>
-<div id="view"></div><div id="msg"><span>Loading the flat…</span></div><div id="drop">Drop the FBX here</div><div class="ver">ver 1.0.8 Beta</div>
+<div id="view"></div>
+<div id="pinview"><div class="pinbar"><span>Fixed joint: <b id="pin-name">–</b></span><span class="grow">the body moves around it</span><label title="Also take out the joint's turning about the vertical"><input type="checkbox" id="pin-yaw"> lock heading</label><button id="pin-x" title="Release the joint (or click it again)">× release</button></div></div>
+<div id="msg"><span>Loading the flat…</span></div><div id="drop">Drop the FBX here</div><div class="ver">ver 1.0.8 Beta</div>
 <div class="side">
   <select id="list"></select>
   <div class="row"><button id="open">Open your own FBX…</button><select id="frame" title="Coordinate frame for an FBX without cameras">
@@ -53,7 +66,7 @@
   </dl>
   <div class="bar opts" id="bar"></div>
 </div>
-<div class="help">Left button = orbit · right = pan · wheel = zoom · space = play/pause · ← → = one frame (with Shift one second) · drop your own FBX into the window</div>
+<div class="help">Left button = orbit · right = pan · wheel = zoom · space = play/pause · ← → = one frame (with Shift one second) · drop your own FBX into the window · click a joint to fix it (split view), click it again to release</div>
 <div class="player">
   <button id="first" title="To the start">⏮</button><button id="prev" title="One frame back">◀︎|</button>
   <button id="play" title="Play / pause">▶︎</button><button id="next" title="One frame forward">|▶︎</button>
@@ -66,9 +79,9 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { loadRig, makeCameras, makeMat, addLights, toggle, roomAt, ROOM_NAME } from "./rig.js?v=1082";
-import { isTagsFbx, makeTagsLayer, describe } from "./radar.js?v=1082";
-const VER = "1082";
+import { loadRig, makeCameras, makeMat, addLights, toggle, roomAt, ROOM_NAME } from "./rig.js?v=1084";
+import { isTagsFbx, makeTagsLayer, describe } from "./radar.js?v=1084";
+const VER = "1084";
 const $ = id => document.getElementById(id), msg = $("msg"), bar = $("bar");
 const Q = new URLSearchParams(location.search); const POS = Q.get("table") === "2" ? "_table2" : "";
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -77,7 +90,65 @@ renderer.outputColorSpace = THREE.SRGBColorSpace; $("view").appendChild(renderer
 const scene = new THREE.Scene(); scene.background = new THREE.Color(0xdfe6ee); addLights(scene);
 const cam = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.03, 200); cam.position.set(3, 4, 6);
 const ctl = new OrbitControls(cam, renderer.domElement); ctl.enableDamping = true; ctl.target.set(0, 0.9, 1);
-addEventListener("resize", () => { cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+// ---------------------------------------------------------------- fixed-joint view (right half): the body relative to one joint
+const pinR = new THREE.WebGLRenderer({ antialias: true }); pinR.setPixelRatio(Math.min(devicePixelRatio, 2)); pinR.outputColorSpace = THREE.SRGBColorSpace;
+$("pinview").prepend(pinR.domElement);
+const pinScene = new THREE.Scene(); pinScene.background = new THREE.Color(0xe9eef3); addLights(pinScene);
+const pinGrid = new THREE.GridHelper(4, 16, 0x8a97a6, 0xc4ccd5); pinScene.add(pinGrid);       // horizontal plane through the fixed joint
+pinScene.add(new THREE.AxesHelper(0.25));
+const pinCam = new THREE.PerspectiveCamera(50, 1, 0.02, 50); pinCam.position.set(1.7, 0.7, 1.9);
+const pinCtl = new OrbitControls(pinCam, pinR.domElement); pinCtl.enableDamping = true; pinCtl.target.set(0, -0.2, 0);
+const PINMARK = new THREE.MeshStandardMaterial({ color: 0xb5763c, emissive: 0x5a2a00, transparent: true, opacity: 0.75 });
+const pinMark = new THREE.Mesh(new THREE.SphereGeometry(0.06, 20, 14), PINMARK);           // the fixed joint in the main view
+const pinMark2 = new THREE.Mesh(pinMark.geometry, PINMARK); pinScene.add(pinMark2);       // and at the origin of the right view
+pinMark.visible = false; scene.add(pinMark);
+let pin = null;                                   // { i: bone index, yaw0, cyl, ball, pts }
+function layout() {
+  for (const [r, c, el] of [[renderer, cam, $("view")], [pinR, pinCam, $("pinview")]]) {
+    const w = Math.max(1, el.clientWidth), h = Math.max(1, el.clientHeight); r.setSize(w, h); c.aspect = w / h;
+    // split: the side panel covers the left of the left view, so the picture's centre moves right of it
+    const pad = c === cam && document.body.classList.contains("split") && innerWidth > 800 ? 345 : 0;
+    if (pad) c.setViewOffset(w + pad, h, 0, 0, w, h); else c.clearViewOffset();
+    c.updateProjectionMatrix();
+  }
+}
+addEventListener("resize", layout);
+const jointName = b => b.name.replace(/^.*:/, "").replace(/^unknown/, "") || b.name;
+function boneYaw(b) {                             // heading of a bone: its local x axis projected on the floor
+  const x = new THREE.Vector3(1, 0, 0).applyQuaternion(b.getWorldQuaternion(new THREE.Quaternion())); return Math.atan2(-x.z, x.x);
+}
+function setPin(i) {
+  if (pin) { pinScene.remove(pin.cyl, pin.ball); pin = null; }
+  pinMark.visible = false; document.body.classList.toggle("split", i != null); layout();
+  if (i == null || !take) return;
+  const cyl = new THREE.InstancedMesh(take.cyl.geometry, BONE, take.links.length), ball = new THREE.InstancedMesh(take.ball.geometry, JOINT, take.bones.length);
+  cyl.frustumCulled = ball.frustumCulled = false; pinScene.add(cyl, ball);
+  pin = { i, cyl, ball, pts: [], yaw0: boneYaw(take.bones[i]) };
+  $("pin-name").textContent = jointName(take.bones[i]); pinMark.visible = true;
+  setTime(t);
+  const mid = pin.pts.reduce((a, p) => a.add(p), new THREE.Vector3()).divideScalar(pin.pts.length);   // frame the whole body
+  pinCtl.target.copy(mid); pinCam.position.copy(mid).add(new THREE.Vector3(2.2, 0.7, 2.6));
+}
+$("pin-x").onclick = () => setPin(null);
+$("pin-yaw").onchange = () => { if (pin) { pin.yaw0 = boneYaw(take.bones[pin.i]); setTime(t); } };
+// click (not drag) on a joint: fix it, or release it when it is the fixed one
+function pickJoint(e, el, camera, pts) {
+  const r = el.getBoundingClientRect(); let best = -1, bd = 22;
+  pts.forEach((p, i) => { const q = p.clone().project(camera); if (q.z > 1) return;
+    const d = Math.hypot((q.x + 1) / 2 * r.width - (e.clientX - r.left), (1 - q.y) / 2 * r.height - (e.clientY - r.top)); if (d < bd) { bd = d; best = i; } });
+  return best;
+}
+for (const [el, camera, ptsOf] of [[renderer.domElement, cam, () => take ? take.bones.map(b => b.getWorldPosition(new THREE.Vector3())) : []],
+                                   [pinR.domElement, pinCam, () => pin?.pts ?? []]]) {
+  let down = null;
+  el.addEventListener("pointerdown", e => { down = [e.clientX, e.clientY]; });
+  el.addEventListener("pointerup", e => {
+    if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 5 || !take) return;
+    const i = pickJoint(e, el, camera, ptsOf()); if (i < 0) return;
+    setPin(pin && pin.i === i ? null : i);
+  });
+}
+layout();
 
 // ---------------------------------------------------------------- the flat (web model frame, the same as on the Model page)
 const rig = await loadRig(VER);
@@ -137,7 +208,7 @@ const fbx = new FBXLoader();
 const BONE = new THREE.MeshStandardMaterial({ color: 0xe0782d, roughness: 0.5 }), JOINT = new THREE.MeshStandardMaterial({ color: 0x7c2d12, roughness: 0.5 });
 const SKIN = new THREE.MeshStandardMaterial({ color: 0x8fa6c4, roughness: 0.7, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false });
 function dispose() {
-  if (!take) return; take.mixer.stopAllAction(); scene.remove(take.root, take.figure, take.trail);
+  if (!take) return; setPin(null); take.mixer.stopAllAction(); scene.remove(take.root, take.figure, take.trail);
   take.root.traverse(o => { o.geometry?.dispose?.(); }); take = null;
 }
 async function open(url, name, frameHint, src) {
@@ -229,13 +300,24 @@ function setTime(s) {
   }
   take.mixer.setTime(t); take.root.updateMatrixWorld(true);
   let low = Infinity;
-  take.bones.forEach((b, i) => { b.getWorldPosition(pa); low = Math.min(low, pa.y); take.ball.setMatrixAt(i, m4.makeTranslation(pa.x, pa.y, pa.z)); });
-  take.links.forEach(([a, b], i) => {
-    a.getWorldPosition(pa); b.getWorldPosition(pb); const d = pb.clone().sub(pa), L = d.length();
-    qa.setFromUnitVectors(UP, L > 1e-6 ? d.divideScalar(L) : UP);
-    take.cyl.setMatrixAt(i, m4.compose(pa.clone().add(pb).multiplyScalar(0.5), qa, new THREE.Vector3(1, Math.max(L, 1e-4), 1)));
-  });
-  take.ball.instanceMatrix.needsUpdate = take.cyl.instanceMatrix.needsUpdate = true;
+  const P = take.bones.map(b => b.getWorldPosition(new THREE.Vector3())), idx = new Map(take.bones.map((b, i) => [b, i]));
+  const drawFigure = (pts, ball, cyl) => {
+    pts.forEach((p, i) => ball.setMatrixAt(i, m4.makeTranslation(p.x, p.y, p.z)));
+    take.links.forEach(([a, b], i) => {
+      pa.copy(pts[idx.get(a)]); pb.copy(pts[idx.get(b)]); const d = pb.clone().sub(pa), L = d.length();
+      qa.setFromUnitVectors(UP, L > 1e-6 ? d.divideScalar(L) : UP);
+      cyl.setMatrixAt(i, m4.compose(pa.clone().add(pb).multiplyScalar(0.5), qa, new THREE.Vector3(1, Math.max(L, 1e-4), 1)));
+    });
+    ball.instanceMatrix.needsUpdate = cyl.instanceMatrix.needsUpdate = true;
+  };
+  P.forEach(p => low = Math.min(low, p.y));
+  drawFigure(P, take.ball, take.cyl);
+  if (pin) {                                       // the same body with the fixed joint held at the origin
+    const c = P[pin.i]; pinMark.position.copy(c);
+    const rot = $("pin-yaw").checked ? new THREE.Quaternion().setFromAxisAngle(UP, pin.yaw0 - boneYaw(take.bones[pin.i])) : new THREE.Quaternion();
+    pin.pts = P.map(p => p.clone().sub(c).applyQuaternion(rot));
+    drawFigure(pin.pts, pin.ball, pin.cyl);
+  }
   const h = take.hipsBone.getWorldPosition(new THREE.Vector3());
   if (follow && lastHips) { const dlt = h.clone().sub(lastHips); dlt.y = 0; ctl.target.add(dlt); cam.position.add(dlt); }
   lastHips = h;
@@ -359,6 +441,7 @@ renderer.setAnimationLoop(now => {
   const tl = timeline();
   if (tl && playing) { let s = t + dt * +$("speed").value; if (s > tl.dur) s = tl.t0; setTime(s); }
   ctl.update(); renderer.render(scene, cam);
+  if (pin) { pinCtl.update(); pinR.render(pinScene, pinCam); }
 });
 </script>
 </body></html>
