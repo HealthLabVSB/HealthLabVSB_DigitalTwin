@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Health.Lab Model – Visualize FBX</title><link rel="stylesheet" href="style.css?v=1081">
+<title>Health.Lab Model – Visualize FBX</title><link rel="stylesheet" href="style.css?v=1082">
 <script type="importmap">{"imports": {"three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
   "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 <style>
@@ -66,9 +66,9 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { loadRig, makeCameras, makeMat, addLights, toggle, roomAt, ROOM_NAME } from "./rig.js?v=1081";
+import { loadRig, makeCameras, makeMat, addLights, toggle, roomAt, ROOM_NAME } from "./rig.js?v=1082";
 import { isTagsFbx, makeTagsLayer, describe } from "./radar.js?v=1082";
-const VER = "1081";
+const VER = "1082";
 const $ = id => document.getElementById(id), msg = $("msg"), bar = $("bar");
 const Q = new URLSearchParams(location.search); const POS = Q.get("table") === "2" ? "_table2" : "";
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -160,11 +160,26 @@ async function open(url, name, frameHint, src) {
   } else {
     // WishCap takes are in the panel calibration (2026-02) unless the user picks another frame for this file; never
     // inherit the frame of the previous file (a Captury take sets shot_003, which turns a WishCap take round by 180°)
-    const cal = frameHint ?? "2026-02"; $("frame").value = cal; $("frame").disabled = false;
     const box = new THREE.Box3(); bones.forEach(b => box.expandByPoint(b.getWorldPosition(new THREE.Vector3())));
     const span = box.max.y - box.min.y, sc = span > 300 ? 0.001 : span > 3 ? 0.01 : 1;
+    // which frame? Try both calibrations over the whole take and keep the one that puts the subject inside the flat
+    // with the feet on the floor (WishCap takes: 2026-02). A frame picked by hand for this file wins.
+    const hipsB = bones.find(b => /hips/i.test(b.name)) ?? bones[0], dur0 = clip?.duration ?? 0, auto = {};
+    for (const c of ["2026-02", "shot_003"]) {
+      const Mc = toModel(c).multiply(new THREE.Matrix4().makeScale(sc, sc, sc)); let ins = 0, onFloor = 0; const N = 30;
+      for (let k = 0; k < N; k++) {
+        mixer.setTime(dur0 * (k + 0.5) / N); g.updateMatrixWorld(true);
+        const h = hipsB.getWorldPosition(new THREE.Vector3()).applyMatrix4(Mc); if (roomAt(rig, h.x, h.z)) ins++;
+        let low = Infinity; for (const b of bones) low = Math.min(low, b.getWorldPosition(new THREE.Vector3()).applyMatrix4(Mc).y);
+        if (Math.abs(low) < 0.15) onFloor++;
+      }
+      auto[c] = (ins + 0.5 * onFloor) / (1.5 * N);
+    }
+    const best = auto["shot_003"] > auto["2026-02"] + 0.05 ? "shot_003" : "2026-02";
+    const cal = frameHint ?? best; $("frame").value = cal; $("frame").disabled = false;
     M = toModel(cal).multiply(new THREE.Matrix4().makeScale(sc, sc, sc));
     reg = `<b>FBX without cameras</b> – read as rig (x, y, z), units ${sc === 0.001 ? "mm" : sc === 0.01 ? "cm" : "m"}, frame ${cal}`
+        + (frameHint ? " (picked by hand)" : ` (chosen automatically: fits the flat ${Math.round(auto[cal] * 100)} % vs ${Math.round(auto[cal === "2026-02" ? "shot_003" : "2026-02"] * 100)} %)`)
         + (fit ? `<br><span class="warn">the cameras in the FBX match no calibration (error ${(fit.rms * 1000).toFixed(0)} mm)</span>` : "");
   }
   const root = new THREE.Group(); root.matrixAutoUpdate = false; root.matrix.copy(M); root.add(g); scene.add(root);
@@ -267,7 +282,7 @@ function play(it, frame) { if (!it) return; if (it.url) open(it.url, it.name, fr
 const pick = () => { const it = current(); if (!it) return; const u = new URL(location.href);
   it.url ? u.searchParams.delete("f") : u.searchParams.set("f", it.file); history.replaceState(null, "", u); play(it); };
 $("list").onchange = pick;
-$("frame").onchange = () => { const it = current(); if (it?.url) it.frame = $("frame").value; play(it, $("frame").value); };
+$("frame").onchange = () => { const it = current(); if (it) it.frame = $("frame").value; play(it, $("frame").value); };
 function openFile(f) {
   if (!f) return; const key = "local:" + (++nLocal); locals.set(key, { key, url: URL.createObjectURL(f), name: f.name });
   if (!localGroup) { localGroup = Object.assign(document.createElement("optgroup"), { label: "Your files" }); $("list").prepend(localGroup); }
