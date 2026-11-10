@@ -158,7 +158,9 @@ async function open(url, name, frameHint, src) {
     M = toModel(fit.cal).multiply(rawToRig(fit.pm, fit.s, fit.t)); $("frame").value = fit.cal; $("frame").disabled = true;
     reg = `<b>Registered by the ${fit.n} cameras in the FBX</b><br>calibration ${fit.cal === "shot_003" ? "shot_003 (Captury)" : "2026-02 (WishCap panel)"}, camera error ${(fit.rms * 1000).toFixed(1)} mm`;
   } else {
-    const cal = frameHint ?? $("frame").value; $("frame").value = cal; $("frame").disabled = false;
+    // WishCap takes are in the panel calibration (2026-02) unless the user picks another frame for this file; never
+    // inherit the frame of the previous file (a Captury take sets shot_003, which turns a WishCap take round by 180°)
+    const cal = frameHint ?? "2026-02"; $("frame").value = cal; $("frame").disabled = false;
     const box = new THREE.Box3(); bones.forEach(b => box.expandByPoint(b.getWorldPosition(new THREE.Vector3())));
     const span = box.max.y - box.min.y, sc = span > 300 ? 0.001 : span > 3 ? 0.01 : 1;
     M = toModel(cal).multiply(new THREE.Matrix4().makeScale(sc, sc, sc));
@@ -261,11 +263,11 @@ for (const it of list) {
 // files opened from disk get their own entries ("Your files"), so the menu always shows what is playing
 const locals = new Map(); let localGroup = null, nLocal = 0;
 const current = () => locals.get($("list").value) ?? list.find(x => x.file === $("list").value);
-function play(it, frame) { if (!it) return; if (it.url) open(it.url, it.name, frame, it.key); else open("fbx/" + encodeURIComponent(it.file), it.name, frame ?? it.frame, it.file); }
+function play(it, frame) { if (!it) return; if (it.url) open(it.url, it.name, frame ?? it.frame, it.key); else open("fbx/" + encodeURIComponent(it.file), it.name, frame ?? it.frame, it.file); }
 const pick = () => { const it = current(); if (!it) return; const u = new URL(location.href);
   it.url ? u.searchParams.delete("f") : u.searchParams.set("f", it.file); history.replaceState(null, "", u); play(it); };
 $("list").onchange = pick;
-$("frame").onchange = () => play(current(), $("frame").value);
+$("frame").onchange = () => { const it = current(); if (it?.url) it.frame = $("frame").value; play(it, $("frame").value); };
 function openFile(f) {
   if (!f) return; const key = "local:" + (++nLocal); locals.set(key, { key, url: URL.createObjectURL(f), name: f.name });
   if (!localGroup) { localGroup = Object.assign(document.createElement("optgroup"), { label: "Your files" }); $("list").prepend(localGroup); }
