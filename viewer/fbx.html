@@ -224,6 +224,11 @@ const toModel = cal => new THREE.Matrix4().set(...rig.to_model[cal].flat());
 // ---------------------------------------------------------------- the take
 const fbx = new FBXLoader();
 const BONE = new THREE.MeshStandardMaterial({ color: 0xe0782d, roughness: 0.5 }), JOINT = new THREE.MeshStandardMaterial({ color: 0x7c2d12, roughness: 0.5 });
+const DOT = new THREE.MeshBasicMaterial({ color: 0x0e7490 });
+const FINE = /(Thumb|Index|Middle|Ring|Pinky)\d$|HandEE$|Heel$|SmallToe$/;
+const MARKER_R = { face: 0.004, hand: 0.005, foot: 0.008, body: 0.01 };
+const markerPart = n => n.startsWith("face_") ? "face" : /_(hand_root|thumb|index|middle|ring|pinky)/.test(n) ? "hand"
+                      : /_(heel|toe)/.test(n) ? "foot" : "body";
 const SKIN = new THREE.MeshStandardMaterial({ color: 0x8fa6c4, roughness: 0.7, transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false });
 function dispose() {
   if (!take) return; setPin(null); take.mixer.stopAllAction(); scene.remove(take.root, take.figure, take.trail);
@@ -237,7 +242,8 @@ async function open(url, name, frameHint, src) {
   dispose();
   const clip = g.animations.reduce((a, b) => (b.duration > (a?.duration ?? -1) ? b : a), null);
   const mixer = new THREE.AnimationMixer(g); if (clip) mixer.clipAction(clip).play();
-  const bones = []; g.traverse(o => { if (o.isBone) bones.push(o); });
+  // "_End" nodes only give the last bones of a WishCap FBX their length in Blender; they are not joints
+  const bones = []; g.traverse(o => { if (o.isBone && !/_End$/.test(o.name)) bones.push(o); });
   if (!bones.length) { msg.innerHTML = `<span>${name}: no skeleton in the file</span>`; return; }
   mixer.setTime(Math.min(1, (clip?.duration ?? 0) / 2)); g.updateMatrixWorld(true);
   const raw = []; g.traverse(o => { if (o.isCamera && /^[0-9a-f]{12}$/i.test(o.name)) raw.push({ mac: o.name.toLowerCase(), p: o.getWorldPosition(new THREE.Vector3()).toArray() }); });
@@ -275,10 +281,18 @@ async function open(url, name, frameHint, src) {
   const skin = []; g.traverse(o => { if (o.isSkinnedMesh) { o.material = SKIN; o.frustumCulled = false; o.visible = showMesh.checked; skin.push(o); } else if (o.isMesh) o.visible = false; });
   // the figure: a cylinder per bone and a ball per joint, refreshed every frame from the bones' world positions
   const links = bones.filter(b => b.parent?.isBone).map(b => [b.parent, b]);
+  // fingers, knuckles, heels and small toes are small joints close together: at the body's size they merge into a lump
+  const sizes = bones.map(b => (FINE.test(b.name) ? 0.3 : 1)), bi = new Map(bones.map((b, i) => [b, i]));
+  const widths = links.map(([a, b]) => Math.min(sizes[bi.get(a)], sizes[bi.get(b)]));
   const figure = new THREE.Group();
   const cyl = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.022, 0.022, 1, 10), BONE, links.length);
   const ball = new THREE.InstancedMesh(new THREE.SphereGeometry(0.035, 14, 10), JOINT, bones.length);
   cyl.frustumCulled = ball.frustumCulled = false; figure.add(cyl, ball); scene.add(figure);
+  // the measured points a WishCap FBX carries beside its rig (group "Markers"): the face, heels, toes, finger joints
+  const markers = g.getObjectByName("Markers")?.children.slice() ?? [];
+  const markerR = markers.map(o => MARKER_R[markerPart(o.name)]);
+  const dots = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 8, 6), DOT, Math.max(1, markers.length));
+  dots.count = markers.length; dots.frustumCulled = false; figure.add(dots);
   let dur = clip?.duration ?? 0; const tr = clip?.tracks[0]?.times ?? [0, 1];
   const dts = []; for (let i = 1; i < tr.length; i++) dts.push(tr[i] - tr[i - 1]); dts.sort((a, b) => a - b);
   const fps = dts.length ? Math.round(1 / dts[dts.length >> 1]) : 30;
@@ -294,7 +308,7 @@ async function open(url, name, frameHint, src) {
   for (let s = t0; s <= dur; s += Math.max(0.05, dur / 1500)) { mixer.setTime(s); root.updateMatrixWorld(true); hipsBone.getWorldPosition(v); pts.push(new THREE.Vector3(v.x, 0.012, v.z)); }
   const trail = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xb5763c }));
   trail.visible = trailOn; scene.add(trail);
-  take = { root, g, mixer, bones, links, cyl, ball, figure, skin, trail, dur, fps, hipsBone, name, t0, src, cal: calUsed }; showMine();
+  take = { root, g, mixer, bones, links, sizes, widths, cyl, ball, markers, markerR, dots, figure, skin, trail, dur, fps, hipsBone, name, t0, src, cal: calUsed }; showMine();
   $("seek").min = t0; $("seek").max = dur; $("seek").step = 1 / fps; $("reg").innerHTML = reg; $("take-x").hidden = false; msg.textContent = "";
   lastHips = null; setTime(t0); hipsBone.getWorldPosition(v);
   ctl.target.copy(v); cam.position.copy(v).add(new THREE.Vector3(-0.6, 3.4, 3.0));
@@ -322,16 +336,18 @@ function setTime(s) {
   let low = Infinity;
   const P = take.bones.map(b => b.getWorldPosition(new THREE.Vector3())), idx = new Map(take.bones.map((b, i) => [b, i]));
   const drawFigure = (pts, ball, cyl) => {
-    pts.forEach((p, i) => ball.setMatrixAt(i, m4.makeTranslation(p.x, p.y, p.z)));
+    pts.forEach((p, i) => { const k = take.sizes[i]; ball.setMatrixAt(i, m4.compose(p, qa.identity(), new THREE.Vector3(k, k, k))); });
     take.links.forEach(([a, b], i) => {
-      pa.copy(pts[idx.get(a)]); pb.copy(pts[idx.get(b)]); const d = pb.clone().sub(pa), L = d.length();
+      pa.copy(pts[idx.get(a)]); pb.copy(pts[idx.get(b)]); const d = pb.clone().sub(pa), L = d.length(), w = take.widths[i];
       qa.setFromUnitVectors(UP, L > 1e-6 ? d.divideScalar(L) : UP);
-      cyl.setMatrixAt(i, m4.compose(pa.clone().add(pb).multiplyScalar(0.5), qa, new THREE.Vector3(1, Math.max(L, 1e-4), 1)));
+      cyl.setMatrixAt(i, m4.compose(pa.clone().add(pb).multiplyScalar(0.5), qa, new THREE.Vector3(w, Math.max(L, 1e-4), w)));
     });
     ball.instanceMatrix.needsUpdate = cyl.instanceMatrix.needsUpdate = true;
   };
   P.forEach(p => low = Math.min(low, p.y));
   drawFigure(P, take.ball, take.cyl);
+  take.markers.forEach((o, i) => { const r = take.markerR[i]; take.dots.setMatrixAt(i, m4.compose(o.getWorldPosition(pa), qa.identity(), new THREE.Vector3(r, r, r))); });
+  take.dots.instanceMatrix.needsUpdate = true;
   if (pin) {                                       // the same body with the fixed joint held at the origin
     const c = P[pin.i]; pinMark.position.copy(c);
     const rot = $("pin-yaw").checked ? new THREE.Quaternion().setFromAxisAngle(UP, pin.yaw0 - boneYaw(take.bones[pin.i])) : new THREE.Quaternion();

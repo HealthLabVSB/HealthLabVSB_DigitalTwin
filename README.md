@@ -258,6 +258,7 @@ group.matrixAutoUpdate = false; group.matrix.copy(M); group.add(fbx);
 **Panels and options:**
 
 - The info panel shows time and frame (the frame rate in its tooltip), the room, the hips position and **the lowest joint relative to the floor**, a quick check that a take sits right. Its values keep their width while a take plays, so the panel does not shift.
+- A WishCap FBX (WishCaptury from commit ce00949 on) carries the measured points beside its rig, in a `Markers` group: the 68 face points of a 133-point take, heels, toes and finger joints. They are drawn as small dots; finger, heel and small-toe joints are drawn slim, and the `_End` nodes that give the last bones their length in Blender are left out.
 - Options:
   - follow the subject;
   - body surface (the Captury mesh);
