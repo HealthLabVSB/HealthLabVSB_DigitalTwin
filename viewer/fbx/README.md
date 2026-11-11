@@ -10,7 +10,7 @@ are ignored by git. Any FBX can also be opened with "Open your own FBX…" or by
 {"file": "my_take.fbx", "name": "My take", "group": "My recordings", "frame": "2026-02"}
 ```
 
-`frame` (`2026-02` = WishCap panel, `shot_003` = Captury) is used only for an FBX without cameras; a Captury FBX is
+`frame` (`2026-02-level` = WishCap panel since November 2026, `2026-02` = WishCap panel before that, `shot_003` = Captury) is used only for an FBX without cameras; a Captury FBX is
 registered automatically from the cameras it contains.
 
 A WishCap **tags FBX** (`tags.fbx` from WishCaptury's `scripts/track_tags.py`: the radar, measuring devices and tagged

@@ -53,7 +53,7 @@
 <div class="side">
   <select id="list"></select>
   <div class="row"><button id="open">Open your own FBX…</button><select id="frame" title="Coordinate frame for an FBX without cameras">
-    <option value="2026-02">frame 2026-02 (WishCap panel)</option><option value="shot_003">frame shot_003 (Captury)</option></select></div>
+    <option value="2026-02-level">frame 2026-02 level (WishCap, from 11/2026)</option><option value="2026-02">frame 2026-02 (WishCap, before 11/2026)</option><option value="shot_003">frame shot_003 (Captury)</option></select></div>
   <input type="file" id="file" accept=".fbx" hidden>
   <div class="mine" id="mine" hidden></div>
   <div class="reg closable" id="take-box"><button class="x" id="take-x" title="Remove this recording from the view" hidden>×</button><div id="reg">–</div></div>
@@ -81,7 +81,7 @@ import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { loadRig, makeCameras, makeMat, addLights, toggle, roomAt, ROOM_NAME } from "./rig.js?v=1085";
 import { isTagsFbx, makeTagsLayer, describe } from "./radar.js?v=1085";
-const VER = "1085";
+const VER = "1086";
 const $ = id => document.getElementById(id), msg = $("msg"), bar = $("bar");
 const Q = new URLSearchParams(location.search); const POS = Q.get("table") === "2" ? "_table2" : "";
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -220,6 +220,9 @@ function rawToRig(pm, s, t) {                      // 4x4: raw FBX coordinates -
   return m.set(...e);
 }
 const toModel = cal => new THREE.Matrix4().set(...rig.to_model[cal].flat());
+// the rig frames an FBX can be in, today's WishCap one first (it wins a tie)
+const FRAMES = ["2026-02-level", "2026-02", "shot_003"].filter(c => rig.to_model[c]);
+const FRAME_NAME = { "2026-02-level": "2026-02 level (WishCap panel, from 11/2026)", "2026-02": "2026-02 (WishCap panel, before 11/2026)", "shot_003": "shot_003 (Captury)" };
 
 // ---------------------------------------------------------------- the take
 const fbx = new FBXLoader();
@@ -251,16 +254,17 @@ async function open(url, name, frameHint, src) {
   let M, reg, calUsed;
   if (fit && fit.rms < 0.3) {
     M = toModel(fit.cal).multiply(rawToRig(fit.pm, fit.s, fit.t)); $("frame").value = fit.cal; $("frame").disabled = true; calUsed = fit.cal;
-    reg = `<b>Registered by the ${fit.n} cameras in the FBX</b><br>calibration ${fit.cal === "shot_003" ? "shot_003 (Captury)" : "2026-02 (WishCap panel)"}, camera error ${(fit.rms * 1000).toFixed(1)} mm`;
+    reg = `<b>Registered by the ${fit.n} cameras in the FBX</b><br>calibration ${FRAME_NAME[fit.cal] ?? fit.cal}, camera error ${(fit.rms * 1000).toFixed(1)} mm`;
   } else {
-    // WishCap takes are in the panel calibration (2026-02) unless the user picks another frame for this file; never
-    // inherit the frame of the previous file (a Captury take sets shot_003, which turns a WishCap take round by 180°)
+    // WishCap takes are in the panel calibration (2026-02-level since 11/2026, 2026-02 before) unless the user picks another
+    // frame for this file; never inherit the frame of the previous file (a Captury take sets shot_003, which turns a
+    // WishCap take round by 180°)
     const box = new THREE.Box3(); bones.forEach(b => box.expandByPoint(b.getWorldPosition(new THREE.Vector3())));
     const span = box.max.y - box.min.y, sc = span > 300 ? 0.001 : span > 3 ? 0.01 : 1;
     // which frame? Try both calibrations over the whole take and keep the one that puts the subject inside the flat
-    // with the feet on the floor (WishCap takes: 2026-02). A frame picked by hand for this file wins.
+    // with the feet on the floor (the frames lie metres apart). A frame picked by hand for this file wins.
     const hipsB = bones.find(b => /hips/i.test(b.name)) ?? bones[0], dur0 = clip?.duration ?? 0, auto = {};
-    for (const c of ["2026-02", "shot_003"]) {
+    for (const c of FRAMES) {
       const Mc = toModel(c).multiply(new THREE.Matrix4().makeScale(sc, sc, sc)); let ins = 0, onFloor = 0; const N = 30;
       for (let k = 0; k < N; k++) {
         mixer.setTime(dur0 * (k + 0.5) / N); g.updateMatrixWorld(true);
@@ -270,11 +274,13 @@ async function open(url, name, frameHint, src) {
       }
       auto[c] = (ins + 0.5 * onFloor) / (1.5 * N);
     }
-    const best = auto["shot_003"] > auto["2026-02"] + 0.05 ? "shot_003" : "2026-02";
+    // the best fit; on a tie (within 5 %) the first in FRAMES, i.e. today's WishCap frame
+    const best = FRAMES.reduce((a, c) => (auto[c] > auto[a] + 0.05 ? c : a), FRAMES[0]);
+    const runnerUp = Math.max(...FRAMES.filter(c => c !== (frameHint ?? best)).map(c => auto[c]));
     const cal = frameHint ?? best; $("frame").value = cal; $("frame").disabled = false; calUsed = cal;
     M = toModel(cal).multiply(new THREE.Matrix4().makeScale(sc, sc, sc));
     reg = `<b>FBX without cameras</b> – read as rig (x, y, z), units ${sc === 0.001 ? "mm" : sc === 0.01 ? "cm" : "m"}, frame ${cal}`
-        + (frameHint ? " (picked by hand)" : ` (chosen automatically: fits the flat ${Math.round(auto[cal] * 100)} % vs ${Math.round(auto[cal === "2026-02" ? "shot_003" : "2026-02"] * 100)} %)`)
+        + (frameHint ? " (picked by hand)" : ` (chosen automatically: fits the flat ${Math.round(auto[cal] * 100)} % vs ${Math.round(runnerUp * 100)} %)`)
         + (fit ? `<br><span class="warn">the cameras in the FBX match no calibration (error ${(fit.rms * 1000).toFixed(0)} mm)</span>` : "");
   }
   const root = new THREE.Group(); root.matrixAutoUpdate = false; root.matrix.copy(M); root.add(g); scene.add(root);

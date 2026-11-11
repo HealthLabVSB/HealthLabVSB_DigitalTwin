@@ -94,7 +94,7 @@ Then open <http://localhost:8766/>. Any static web server works. The viewer load
 | *(none)* | Model frame: metres, axes of the flat. Use this when the model is used on its own. |
 | `_no_ceiling` | Without the ceiling, for top views. |
 | `_table2` | The dining table and its 3 chairs moved to the window by the shelf, leaving a large free area in front of the kitchen. |
-| `_wishcap` | Placed in the frame of the WishCap panel takes (calibration `camera-2026-02.calib`). |
+| `_wishcap` | Placed in the frame of the WishCap panel takes from November 2026 on (calibration `camera-2026-02-level.calib`, the level copy of 2026-02). |
 | `_captury` | Placed where Blender puts an FBX exported by Captury (calibration `shot_003`). |
 
 **Large files that are not in git.** GitHub refuses files over 100 MB. Ask the maintainers for these, or get them from the release assets:
@@ -153,7 +153,8 @@ Rules of thumb:
 |---|---|---|
 | **Model frame**, glTF axes | x = a (west → east), y = height, z = −b (b runs south → north). Metres, floor y = 0, ceiling 2.70 m. | `model/flat_baked.glb`, viewer tabs Model and Visualize FBX |
 | **Model frame**, Blender axes | x = a, y = b, z = height | `flat_photoreal.blend`, any glTF imported into Blender |
-| **WishCap rig, 2026-02** | Calibration `camera-2026-02.calib`. Metres (mm in FBX/C3D), Y up. The floor is at y ≈ 0.104 m. | Takes from the WishCap operator panel |
+| **WishCap rig, 2026-02 level** | Calibration `camera-2026-02-level.calib`: Captury's 9:05 save of the 27 Feb 2026 calibration, the same cameras as 2026-02 with a level floor. Metres (mm in FBX/C3D), Y up, floor y ≈ 0.013 m. | Takes from the WishCap operator panel since November 2026 |
+| **WishCap rig, 2026-02** | Calibration `camera-2026-02.calib` (Captury's 9:23 save, which Captury still uses). Its world is 0.65° off level. Metres (mm in FBX/C3D), Y up, floor y ≈ 0.104 m. | WishCap takes made before November 2026 |
 | **Captury rig, shot_003** | Calibration of the Captury exports (e.g. Dataset_klekz). mm in FBX/C3D, Y up, floor y ≈ 0. | C3D / FBX exported by Captury |
 | **Splat frame** | The frame of the original reconstruction: +Y **down** (COLMAP convention), turned 10.75° about the vertical against the walls. Metres or splat units. | Original and hybrid splats, viewer splat tabs |
 
@@ -175,7 +176,7 @@ Every matrix is in `transforms/frames.json`. They are 4 × 4, row-major, act on 
 ```python
 import json, numpy as np
 F = json.load(open("transforms/frames.json"))
-M = np.array(F["rig_to_model"]["captury_shot003"]["matrix"])    # or "wishcap_2026_02"
+M = np.array(F["rig_to_model"]["captury_shot003"]["matrix"])    # or "wishcap_2026_02_level"
 P_rig = markers_mm / 1000.0                                     # (N, 3), rig frame, Y up, metres
 P = (np.c_[P_rig, np.ones(len(P_rig))] @ M.T)[:, :3]            # model frame: x = a, y = height, z = -b
 P_blender = P[:, [0, 2, 1]] * [1, -1, 1]                        # (a, b, height) if you work in Blender axes
@@ -304,7 +305,7 @@ group.matrixAutoUpdate = false; group.matrix.copy(M); group.add(fbx);
 | File | Frame |
 |---|---|
 | `flat_photoreal.blend`, `flat_photoreal_table2.blend` | Model frame. |
-| `flat_photoreal_wishcap.blend`, `flat_photoreal_table2_wishcap.blend` | WishCap 2026-02 frame. Everything hangs under the empty `flat_in_mocap_frame`, so the registration is one visible transform. |
+| `flat_photoreal_wishcap.blend`, `flat_photoreal_table2_wishcap.blend` | WishCap 2026-02 level frame (takes since November 2026). Everything hangs under the empty `flat_in_mocap_frame`, so the registration is one visible transform; for an older take set it to `blender` → `wishcap_before_2026_11` from `frames.json`. |
 | `flat_photoreal_captury.blend`, `flat_photoreal_table2_captury.blend` | Where a Captury FBX lands. |
 
 **Collections** (hidden by default; switch the eye icon on):
@@ -327,6 +328,7 @@ group.matrixAutoUpdate = false; group.matrix.copy(M); group.add(fbx);
 | Captury C3D | The lowest marker is 0.4 cm above the model floor. |
 | 20 Captury FBX takes | Lowest joint −1.8 to +1.6 cm from the floor. |
 | WishCap `square002_rig.fbx` (shot_003 frame) | ±3 cm, the whole take inside the living room. |
+| 13 WishCap walks along the whole living room (5.6 m, 2 Nov 2026) | Lowest point of the foot 4–25 mm above the floor everywhere. Before the registration was levelled (November 2026) it ran from −21 mm at the north end to +59 mm at the south end: the 2026-02 frame is 0.65° off level, which a small area like the mat does not show. |
 
 **Known issues:**
 
@@ -422,6 +424,7 @@ It is not an open-source license. Third-party libraries used by the viewer (thre
 | 1.0.5 | Flickering black cabinet corners fixed (z-fighting), bedroom wardrobe with three doors moved toward the door. |
 | 1.0.6 | Dimensions checked against the rig cameras (with a scale that was later corrected). |
 | 1.0.7 | True scale 1.1711 m/unit from triangulation. Model registered to the WishCap and Captury frames. Symmetric hall logo, beds clear of the door, high-resolution hybrid splat, table position 2, larger bedroom with a freestanding wardrobe. |
+| 1.0.8 Beta, update 2026-11 | Registration levelled: every rig frame turned 0.71° about the mat, new WishCap frame `2026-02-level`, `_wishcap` / `_captury` files and `frames.json` regenerated. Visualize FBX shows the fingers, face and heels of a WishCap FBX. |
 | **1.0.8 Beta** | **Health.Lab Model.** Visualize FBX viewer (play, scrub, automatic registration from the cameras in the FBX). Camera and mat toggles. Gaussian splat in the menu. `_captury` files corrected to the Captury FBX axis convention. English release with `frames.json`, license and citation. |
 
 <sub>ver 1.0.8 Beta</sub>

@@ -35,7 +35,7 @@ original atlas layout: size 4096, density 160, 256 spp; `_captury` reframed with
 
 ### What was found
 
-A few **model walls** are misplaced. The rig calibration itself is fine: cameras on interior walls sit 0–15 cm in front of them, and recordings stand on the floor to ±2 cm.
+A few **model walls** are misplaced. The rig calibration itself is fine: cameras on interior walls sit 0–15 cm in front of them, and recordings stand on the floor to ±2 cm (over the whole living room only since the registration was levelled in November 2026; see the README's registration checks).
 
 | Where | Finding | Evidence |
 |---|---|---|

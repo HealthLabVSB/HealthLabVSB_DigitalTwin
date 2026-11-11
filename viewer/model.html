@@ -23,7 +23,7 @@ const cam = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.03, 200)
 let yaw = 0, pitch = 0; const pos = new THREE.Vector3();
 function look(p, t) { pos.set(...p); const d = new THREE.Vector3(...t).sub(pos).normalize(); yaw = Math.atan2(-d.x, -d.z); pitch = Math.asin(d.y); }
 function apply() { cam.position.copy(pos); cam.rotation.set(pitch, yaw, 0, "YXZ"); }
-const VER = "1085";                                       // bump with every iteration: the browser must not reuse an old model
+const VER = "1086";                                       // bump with every iteration: the browser must not reuse an old model
 const q0 = new URLSearchParams(location.search); const POS = q0.get("table") === "2" ? "_table2" : "";
 const loader = new GLTFLoader(); const models = {}; let ceiling = true;
 function show() { for (const k in models) models[k].visible = (k === "strop") === ceiling; }
